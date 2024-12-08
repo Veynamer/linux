@@ -89,9 +89,14 @@ static int panfrost_clk_init(struct panfrost_device *pfdev)
 		goto disable_bus_clock;
 	}
 
-	err = clk_prepare_enable(pfdev->mem_clock);
-	if (err)
-		goto disable_bus_ace_clock;
+	if (pfdev->mem_clock) {
+		rate = clk_get_rate(pfdev->mem_clock);
+		dev_info(pfdev->base.dev, "mem_clock rate = %lu\n", rate);
+
+		err = clk_prepare_enable(pfdev->mem_clock);
+		if (err)
+			goto disable_bus_ace_clock;
+	}
 
 	return 0;
 
