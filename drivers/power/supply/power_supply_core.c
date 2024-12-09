@@ -206,8 +206,7 @@ static int __power_supply_populate_supplied_from(struct power_supply *epsy,
 		if (np == epsy->dev.fwnode) {
 			dev_dbg(&psy->dev, "%s: Found supply : %s\n",
 				psy->desc->name, epsy->desc->name);
-			psy->supplied_from[i-1] = (char *)epsy->desc->name;
-			psy->num_supplies++;
+			psy->supplied_from[psy->num_supplies++] = (char *)epsy->desc->name;
 			fwnode_handle_put(np);
 			break;
 		}
@@ -228,41 +227,39 @@ static int power_supply_populate_supplied_from(struct power_supply *psy)
 	return error;
 }
 
-static int  __power_supply_find_supply_from_node(struct power_supply *epsy,
-						 void *data)
-{
-	struct fwnode_handle *fwnode = data;
+struct psy_find_supplies_from_node_data {
+	struct fwnode_handle *np;
+	int num_supplies;
+};
 
-	/* returning non-zero breaks out of power_supply_for_each_psy loop */
-	if (epsy->dev.fwnode == fwnode)
-		return 1;
+static int  __power_supply_find_supply_from_node(struct power_supply *epsy,
+						 void *_data)
+{
+	struct psy_find_supplies_from_node_data *data = _data;
+
+	if (epsy->dev.fwnode == data->np)
+		data->num_supplies += 1;
 
 	return 0;
 }
 
-static int power_supply_find_supply_from_fwnode(struct fwnode_handle *supply_node)
+static int power_supply_find_supplies_from_fwnode(struct fwnode_handle *supply_node)
 {
+	struct psy_find_supplies_from_node_data data = {
+		.np = supply_node,
+		.num_supplies = 0,
+	};
 	int error;
 
-	/*
-	 * power_supply_for_each_psy() either returns its own errors or values
-	 * returned by __power_supply_find_supply_from_node().
-	 *
-	 * __power_supply_find_supply_from_fwnode() will return 0 (no match)
-	 * or 1 (match).
-	 *
-	 * We return 0 if power_supply_for_each_psy() returned 1, -EPROBE_DEFER if
-	 * it returned 0, or error as returned by it.
-	 */
-	error = power_supply_for_each_psy(supply_node, __power_supply_find_supply_from_node);
+	error = power_supply_for_each_psy(&data, __power_supply_find_supply_from_node);
 
-	return error ? (error == 1 ? 0 : error) : -EPROBE_DEFER;
+	return error ? error : data.num_supplies;
 }
 
 static int power_supply_check_supplies(struct power_supply *psy)
 {
 	struct fwnode_handle *np;
-	int cnt = 0;
+	int i = 0, cnt = 0;
 
 	/* If there is already a list honor it */
 	if (psy->supplied_from && psy->num_supplies > 0)
@@ -275,21 +272,23 @@ static int power_supply_check_supplies(struct power_supply *psy)
 	do {
 		int ret;
 
-		np = fwnode_find_reference(psy->dev.fwnode, "power-supplies", cnt++);
+		np = fwnode_find_reference(psy->dev.fwnode, "power-supplies", i++);
 		if (IS_ERR(np))
 			break;
 
-		ret = power_supply_find_supply_from_fwnode(np);
+		ret = power_supply_find_supplies_from_fwnode(np);
 		fwnode_handle_put(np);
 
-		if (ret) {
+		if (ret <= 0) {
 			dev_dbg(&psy->dev, "Failed to find supply!\n");
-			return ret;
+			return ret ? ret : -EPROBE_DEFER;
 		}
+
+		cnt += ret;
 	} while (!IS_ERR(np));
 
 	/* Missing valid "power-supplies" entries */
-	if (cnt == 1)
+	if (cnt == 0)
 		return 0;
 
 	/* All supplies found, allocate char ** array for filling */
@@ -299,7 +298,7 @@ static int power_supply_check_supplies(struct power_supply *psy)
 		return -ENOMEM;
 
 	*psy->supplied_from = devm_kcalloc(&psy->dev,
-					   cnt - 1, sizeof(**psy->supplied_from),
+					   cnt, sizeof(**psy->supplied_from),
 					   GFP_KERNEL);
 	if (!*psy->supplied_from)
 		return -ENOMEM;
