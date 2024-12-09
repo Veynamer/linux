@@ -15,6 +15,7 @@ obj-$(CONFIG_PHY_LPC18XX_USB_OTG)	+= phy-lpc18xx-usb-otg.o
 obj-$(CONFIG_PHY_NXP_PTN3222)		+= phy-nxp-ptn3222.o
 obj-$(CONFIG_PHY_PISTACHIO_USB)		+= phy-pistachio-usb.o
 obj-$(CONFIG_PHY_SNPS_EUSB2)		+= phy-snps-eusb2.o
+obj-$(CONFIG_PHY_SPRD_USB2)		+= phy-sprd-usb2.o
 obj-$(CONFIG_PHY_XGENE)			+= phy-xgene.o
 
 obj-$(CONFIG_GENERIC_PHY)		+= allwinner/	\

@@ -126,6 +126,15 @@ config PHY_SNPS_EUSB2
 	  Enable support for the USB high-speed SNPS eUSB2 phy on select
 	  SoCs. The PHY is usually paired with a Synopsys DWC3 USB controller.
 
+config PHY_SPRD_USB2
+	tristate "Unisoc USB2 PHY driver"
+	depends on ARCH_SPRD || COMPILE_TEST
+	depends on OF
+	select GENERIC_PHY
+	help
+	  Enable support for the USB2.0 PHY found on Unisoc SoCs such as
+	  UMS9230.
+
 config PHY_XGENE
 	tristate "APM X-Gene 15Gbps PHY support"
 	depends on HAS_IOMEM && OF && (ARCH_XGENE || COMPILE_TEST)
