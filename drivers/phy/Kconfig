@@ -146,6 +146,12 @@ config PHY_SPACEMIT_K1_PCIE
 	  Enable support for the PCIe and USB 3 combo PHY and two
 	  PCIe-only PHYs used in the SpacemiT K1 SoC.
 
+config PHY_SPRD_USB2
+	tristate "Unisoc USB2 PHY driver"
+	depends on ARCH_SPRD || COMPILE_TEST
+	depends on OF
+	select GENERIC_PHY
+
 source "drivers/phy/allwinner/Kconfig"
 source "drivers/phy/amlogic/Kconfig"
 source "drivers/phy/apple/Kconfig"
