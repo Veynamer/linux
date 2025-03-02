@@ -1636,11 +1636,39 @@
 						sprd,channel-name = "lte_at0";
 					};
 
+					/* SIM 0 secondary port */
+					atcmd@1 {
+						compatible = "sprd,spipe-at";
+						reg = <1>, <1>;
+						sprd,channel-name = "lte_at1";
+					};
+
+					/* SIM 0 secondary port */
+					atcmd@2 {
+						compatible = "sprd,spipe-at";
+						reg = <2>, <2>;
+						sprd,channel-name = "lte_at2";
+					};
+
 					/* SIM 1 port with indications */
 					atcmd@3 {
 						compatible = "sprd,spipe-at";
 						reg = <3>, <3>;
 						sprd,channel-name = "lte_at3";
+					};
+
+					/* SIM 1 secondary port */
+					atcmd@4 {
+						compatible = "sprd,spipe-at";
+						reg = <4>, <4>;
+						sprd,channel-name = "lte_at4";
+					};
+
+					/* SIM 1 secondary port */
+					atcmd@5 {
+						compatible = "sprd,spipe-at";
+						reg = <5>, <5>;
+						sprd,channel-name = "lte_at5";
 					};
 				};
 
