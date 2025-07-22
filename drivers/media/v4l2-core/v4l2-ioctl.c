@@ -1471,6 +1471,10 @@ static void v4l_fill_fmtdesc(struct v4l2_fmtdesc *fmt)
 	case V4L2_META_FMT_C3ISP_STATS:		descr = "Amlogic C3 ISP Statistics"; break;
 	case V4L2_META_FMT_MALI_C55_PARAMS:	descr = "ARM Mali-C55 ISP Parameters"; break;
 	case V4L2_META_FMT_MALI_C55_STATS:	descr = "ARM Mali-C55 ISP 3A Statistics"; break;
+	case V4L2_META_FMT_SPRD_DCAM_CFG:	descr = "Unisoc DCAM Config Parameters"; break;
+	case V4L2_META_FMT_SPRD_DCAM_LSC:	descr = "Unisoc DCAM Lens Grid"; break;
+	case V4L2_META_FMT_SPRD_DCAM_STATS:	descr = "Unisoc DCAM Statistics"; break;
+	case V4L2_META_FMT_SPRD_ISP_CFG:	descr = "Unisoc ISP Config Parameters"; break;
 	case V4L2_PIX_FMT_NV12_8L128:	descr = "NV12 (8x128 Linear)"; break;
 	case V4L2_PIX_FMT_NV12M_8L128:	descr = "NV12M (8x128 Linear)"; break;
 	case V4L2_PIX_FMT_NV12_10BE_8L128:	descr = "10-bit NV12 (8x128 Linear, BE)"; break;
