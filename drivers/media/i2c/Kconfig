@@ -800,6 +800,14 @@ config VIDEO_S5K3M5
 	  To compile this driver as a module, choose M here: the
 	  module will be called s5k3m5.
 
+config VIDEO_S5K3P3
+	tristate "Samsung S5K3P3 sensor support"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  This is a V4L2 sensor driver for the Samsung S5K3P3 raw
+	  camera sensor.
+
 config VIDEO_S5K5BAF
 	tristate "Samsung S5K5BAF sensor support"
 	help
