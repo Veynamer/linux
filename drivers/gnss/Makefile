@@ -15,6 +15,9 @@ gnss-mtk-y := mtk.o
 obj-$(CONFIG_GNSS_SIRF_SERIAL)		+= gnss-sirf.o
 gnss-sirf-y := sirf.o
 
+obj-$(CONFIG_GNSS_SPRD)			+= gnss-sprd.o
+gnss-sprd-y := sprd.o
+
 obj-$(CONFIG_GNSS_UBX_SERIAL)		+= gnss-ubx.o
 gnss-ubx-y := ubx.o
 

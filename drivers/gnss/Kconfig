@@ -41,6 +41,17 @@ config GNSS_SIRF_SERIAL
 
 	  If unsure, say N.
 
+config GNSS_SPRD
+	tristate "Unisoc integrated GNSS receiver support"
+	depends on RPMSG
+	help
+	  Say Y here if you have a Unisoc SoC with an integrated GNSS receiver.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called gnss-sprd.
+
+	  If unsure, say N.
+
 config GNSS_UBX_SERIAL
 	tristate "u-blox GNSS receiver support"
 	depends on SERIAL_DEV_BUS
