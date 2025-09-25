@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/pm.h>
+#include <linux/reboot.h>
 #include <linux/regmap.h>
 #include <linux/syscore_ops.h>
 
@@ -17,8 +18,6 @@
 #define SC27XX_PWR_OFF_EN	BIT(0)
 #define SC27XX_SLP_CTRL		0xdf0
 #define SC27XX_LDO_XTL_EN	BIT(3)
-
-static struct regmap *regmap;
 
 /*
  * On Spreadtrum platform, we need power off system through external SC27xx
@@ -49,26 +48,37 @@ static struct syscore poweroff_syscore = {
 	.ops = &poweroff_syscore_ops,
 };
 
-static void sc27xx_poweroff_do_poweroff(void)
+static int sc27xx_poweroff_do_poweroff(struct sys_off_data *off_data)
 {
+	struct regmap *regmap = off_data->cb_data;
+
 	/* Disable the external subsys connection's power firstly */
 	regmap_write(regmap, SC27XX_SLP_CTRL, SC27XX_LDO_XTL_EN);
 
 	regmap_write(regmap, SC27XX_PWR_PD_HW, SC27XX_PWR_OFF_EN);
+
+	mdelay(1000);
+
+	pr_emerg("Unable to poweroff system\n");
+
+	return NOTIFY_DONE;
 }
 
 static int sc27xx_poweroff_probe(struct platform_device *pdev)
 {
-	if (regmap)
-		return -EINVAL;
+	struct regmap *regmap;
 
 	regmap = dev_get_regmap(pdev->dev.parent, NULL);
 	if (!regmap)
 		return -ENODEV;
 
-	pm_power_off = sc27xx_poweroff_do_poweroff;
 	register_syscore(&poweroff_syscore);
-	return 0;
+
+	return devm_register_sys_off_handler(&pdev->dev,
+					     SYS_OFF_MODE_POWER_OFF,
+					     SYS_OFF_PRIO_DEFAULT,
+					     sc27xx_poweroff_do_poweroff,
+					     regmap);
 }
 
 static const struct platform_device_id sc27xx_poweroff_id_table[] = {
