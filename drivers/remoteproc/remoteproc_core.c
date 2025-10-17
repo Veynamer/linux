@@ -485,13 +485,22 @@ static int rproc_handle_vdev(struct rproc *rproc, void *ptr,
 
 	/* make sure resource isn't truncated */
 	rsc_size = struct_size(rsc, vring, rsc->num_of_vrings);
+	rsc_size = size_add(rsc_size, rsc->ext_features_len);
 	if (size_add(rsc_size, rsc->config_len) > avail) {
 		dev_err(dev, "vdev rsc is truncated\n");
 		return -EINVAL;
 	}
 
+	/* make sure extended features have a supported length */
+	if (rsc->ext_features_len != sizeof(struct fw_rsc_vdev_ext) &&
+	    rsc->ext_features_len != 0) {
+		dev_err(dev, "vdev rsc has unsupported ext features len: %d\n",
+			rsc->ext_features_len);
+		return -EINVAL;
+	}
+
 	/* make sure reserved bytes are zeroes */
-	if (rsc->reserved[0] || rsc->reserved[1]) {
+	if (rsc->reserved) {
 		dev_err(dev, "vdev rsc has non zero reserved bytes\n");
 		return -EINVAL;
 	}

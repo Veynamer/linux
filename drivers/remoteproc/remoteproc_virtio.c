@@ -250,6 +250,13 @@ static u64 rproc_virtio_get_features(struct virtio_device *vdev)
 
 	rsc = (void *)rvdev->rproc->table_ptr + rvdev->rsc_offset;
 
+	if (rsc->ext_features_len == sizeof(struct fw_rsc_vdev_ext)) {
+		struct fw_rsc_vdev_ext *ext =
+			(void *)&rsc->vring[rsc->num_of_vrings];
+
+		return (u64)ext->dfeatures_ext << 32 | rsc->dfeatures;
+	}
+
 	return rsc->dfeatures;
 }
 
@@ -276,14 +283,21 @@ static int rproc_virtio_finalize_features(struct virtio_device *vdev)
 	/* Give virtio_rproc a chance to accept features. */
 	rproc_transport_features(vdev);
 
-	/* Make sure we don't have any features > 32 bits! */
-	BUG_ON((u32)vdev->features != vdev->features);
-
 	/*
 	 * Remember the finalized features of our vdev, and provide it
 	 * to the remote processor once it is powered on.
 	 */
 	rsc->gfeatures = vdev->features;
+
+	if (rsc->ext_features_len == sizeof(struct fw_rsc_vdev_ext)) {
+		struct fw_rsc_vdev_ext *ext =
+			(void *)&rsc->vring[rsc->num_of_vrings];
+
+		ext->dfeatures_ext = vdev->features >> 32;
+	} else {
+		/* Make sure we don't have any features > 32 bits! */
+		BUG_ON((u32)vdev->features != vdev->features);
+	}
 
 	return 0;
 }
@@ -296,7 +310,7 @@ static void rproc_virtio_get(struct virtio_device *vdev, unsigned int offset,
 	void *cfg;
 
 	rsc = (void *)rvdev->rproc->table_ptr + rvdev->rsc_offset;
-	cfg = &rsc->vring[rsc->num_of_vrings];
+	cfg = (void *)&rsc->vring[rsc->num_of_vrings] + rsc->ext_features_len;
 
 	if (offset + len > rsc->config_len || offset + len < len) {
 		dev_err(&vdev->dev, "rproc_virtio_get: access out of bounds\n");
@@ -314,7 +328,7 @@ static void rproc_virtio_set(struct virtio_device *vdev, unsigned int offset,
 	void *cfg;
 
 	rsc = (void *)rvdev->rproc->table_ptr + rvdev->rsc_offset;
-	cfg = &rsc->vring[rsc->num_of_vrings];
+	cfg = (void *)&rsc->vring[rsc->num_of_vrings] + rsc->ext_features_len;
 
 	if (offset + len > rsc->config_len || offset + len < len) {
 		dev_err(&vdev->dev, "rproc_virtio_set: access out of bounds\n");

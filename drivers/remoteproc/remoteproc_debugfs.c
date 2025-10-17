@@ -277,6 +277,7 @@ static int rproc_rsc_table_show(struct seq_file *seq, void *p)
 	static const char * const types[] = {"carveout", "devmem", "trace", "vdev"};
 	struct rproc *rproc = seq->private;
 	struct resource_table *table = rproc->table_ptr;
+	struct fw_rsc_vdev_ext *ext;
 	struct fw_rsc_carveout *c;
 	struct fw_rsc_devmem *d;
 	struct fw_rsc_trace *t;
@@ -333,8 +334,16 @@ static int rproc_rsc_table_show(struct seq_file *seq, void *p)
 			seq_printf(seq, "  Config length 0x%x\n", v->config_len);
 			seq_printf(seq, "  Status 0x%x\n", v->status);
 			seq_printf(seq, "  Number of vrings %d\n", v->num_of_vrings);
-			seq_printf(seq, "  Reserved (should be zero) [%d][%d]\n\n",
-				   v->reserved[0], v->reserved[1]);
+			seq_printf(seq, "  Ext features length %d\n", v->ext_features_len);
+			seq_printf(seq, "  Reserved (should be zero) [%d]\n\n", v->reserved);
+
+			if (v->ext_features_len == sizeof(struct fw_rsc_vdev_ext)) {
+				ext = (void *)&v->vring[v->num_of_vrings];
+				seq_printf(seq, "  Extended device features 0x%x\n",
+					   ext->dfeatures_ext);
+				seq_printf(seq, "  Extended guest features 0x%x\n\n",
+					   ext->gfeatures_ext);
+			}
 
 			for (j = 0; j < v->num_of_vrings; j++) {
 				seq_printf(seq, "  Vring %d\n", j);

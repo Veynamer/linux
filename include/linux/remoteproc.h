@@ -264,6 +264,18 @@ struct fw_rsc_vdev_vring {
 } __packed;
 
 /**
+ * struct fw_rsc_vdev_ext - virtio extended features header
+ * @dfeatures_ext: upper 32 bits of the virtio device features
+ * @gfeatures_ext: upper 32 bits of the virtio negotiated features
+ *
+ * This descriptor is an extension to the fw_rsc_vdev structure (see below).
+ */
+struct fw_rsc_vdev_ext {
+	u32 dfeatures_ext;
+	u32 gfeatures_ext;
+} __packed;
+
+/**
  * struct fw_rsc_vdev - virtio device header
  * @id: virtio device id (as in virtio_ids.h)
  * @notifyid: a unique rproc-wide notify index for this vdev. This notify
@@ -276,6 +288,10 @@ struct fw_rsc_vdev_vring {
  * space lies in the resource table immediate after this vdev header.
  * @status: a place holder where the host will indicate its virtio progress.
  * @num_of_vrings: indicates how many vrings are described in this vdev header
+ * @ext_features_len: if not zero, specifices the size of a 'struct
+ * fw_rsc_vdev_ext' containing extended virtio features for this device.
+ * This structure is located immediately after the last vring in this structure
+ * and before the config space.
  * @reserved: reserved (must be zero)
  * @vring: an array of @num_of_vrings entries of 'struct fw_rsc_vdev_vring'.
  *
@@ -307,7 +323,8 @@ struct fw_rsc_vdev {
 	u32 config_len;
 	u8 status;
 	u8 num_of_vrings;
-	u8 reserved[2];
+	u8 ext_features_len;
+	u8 reserved;
 	struct fw_rsc_vdev_vring vring[];
 } __packed;
 
