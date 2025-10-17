@@ -1,0 +1,44 @@
+/ {
+	reserved-memory {
+		/delete-node/ smem@88000000;
+		/delete-node/ pmsys@88040000;
+
+		pmsys_fixed_region: pmsys@88000000 {
+			reg = <0x0 0x88000000 0x0 0x2c0000>;
+			no-map;
+		};
+
+		pmsys_dynamic_region: pmsys@882c0000 {
+			compatible = "restricted-dma-pool";
+			reg = <0x0 0x882c0000 0x0 0x40000>;
+		};
+	};
+
+	soc {
+		/delete-node/ pmsys@62010000;
+
+		pmsys@62000000 {
+			compatible = "simple-bus";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges = <0x0 0x62000000 0x1000000>;
+			dma-ranges = <0x00000000 0x62010000 0x0004e000>,
+				     <0x10000000 0x88000000 0x002b0000>,
+				     <0x182b0000 0x882b0000 0x00050000>;
+
+			remoteproc@10000 {
+				compatible = "sprd,ums9230-pmsys-opencp";
+				reg = <0x10000 0x4e000>;
+
+				sprd,syscon-aon-apb = <&aon_apb_regs>;
+
+				resets = <&pmu_gate RESET_PMU_APB_SP_SOFT_RST>;
+
+				mboxes = <&mailbox 1>;
+
+				memory-region = <&pmsys_dynamic_region>, <&pmsys_fixed_region>;
+				firmware-name = "opencp/ums9230-pmsys.elf";
+			};
+		};
+	};
+};
