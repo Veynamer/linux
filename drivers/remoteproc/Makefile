@@ -36,6 +36,7 @@ obj-$(CONFIG_RCAR_REMOTEPROC)		+= rcar_rproc.o
 obj-$(CONFIG_SPRD_REMOTEPROC_COMMON)	+= sprd_common.o
 obj-$(CONFIG_SPRD_MODEM_REMOTEPROC)	+= sprd_modem.o
 obj-$(CONFIG_SPRD_PMSYS_REMOTEPROC)	+= sprd_pmsys.o
+obj-$(CONFIG_SPRD_PMSYS_REMOTEPROC_OPENCP)	+= sprd_pmsys_opencp.o
 obj-$(CONFIG_SPRD_WCN_REMOTEPROC)	+= sprd_wcn.o
 obj-$(CONFIG_ST_REMOTEPROC)		+= st_remoteproc.o
 obj-$(CONFIG_ST_SLIM_REMOTEPROC)	+= st_slim_rproc.o

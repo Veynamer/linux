@@ -310,12 +310,20 @@ config SPRD_MODEM_REMOTEPROC
 	  known as PUBCP) found on Spreadtrum/Unisoc SoCs.
 
 config SPRD_PMSYS_REMOTEPROC
-	tristate "Unisoc PMSYS remoteproc support"
+	tristate "Unisoc PMSYS remoteproc support (Unisoc firmware)"
 	depends on ARCH_SPRD || COMPILE_TEST
 	select SPRD_REMOTEPROC_COMMON
 	help
 	  Say y here to support the PMSYS remote processor found on
-	  Spreadtrum/Unisoc SoCs.
+	  Spreadtrum/Unisoc SoCs with Unisoc's original firmware.
+
+config SPRD_PMSYS_REMOTEPROC_OPENCP
+	tristate "Unisoc PMSYS remoteproc support (OpenCP firmware)"
+	depends on ARCH_SPRD || COMPILE_TEST
+	select RPMSG_VIRTIO
+	help
+	  Say y here to support the PMSYS remote processor found on
+	  Spreadtrum/Unisoc SoCs with OpenCP firmware.
 
 config SPRD_WCN_REMOTEPROC
 	tristate "Unisoc wireless connectivity processor support"
