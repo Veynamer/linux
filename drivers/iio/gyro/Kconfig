@@ -135,6 +135,10 @@ config MPU3050_I2C
 	  This driver can be built as a module. The module will be called
 	  inv-mpu3050-i2c.
 
+config IIO_SPRD_SHUB_GYRO
+	tristate "Unisoc sensor hub gyroscope driver"
+	depends on IIO_SPRD_SHUB
+
 config IIO_ST_GYRO_3AXIS
 	tristate "STMicroelectronics gyroscopes 3-Axis Driver"
 	depends on (I2C || SPI_MASTER) && SYSFS
