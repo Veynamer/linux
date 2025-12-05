@@ -151,6 +151,14 @@ config MMC5633
 	  To compile this driver as a module, choose M here: the module
 	  will be called mmc5633
 
+config IIO_SPRD_SHUB_COMPASS
+	tristate "Unisoc sensor hub compass driver"
+	depends on IIO_SPRD_SHUB
+
+config IIO_SPRD_SHUB_MAGN
+	tristate "Unisoc sensor hub magnetometer driver"
+	depends on IIO_SPRD_SHUB
+
 config IIO_ST_MAGN_3AXIS
 	tristate "STMicroelectronics magnetometers 3-Axis Driver"
 	depends on (I2C || SPI_MASTER) && SYSFS

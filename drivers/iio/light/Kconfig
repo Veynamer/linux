@@ -230,6 +230,10 @@ config IIO_CROS_EC_LIGHT_PROX
 	  To compile this driver as a module, choose M here:
 	  the module will be called cros_ec_light_prox.
 
+config IIO_SPRD_SHUB_LIGHT
+	tristate "Unisoc sensor hub ambient light sensor driver"
+	depends on IIO_SPRD_SHUB
+
 config GP2AP002
 	tristate "Sharp GP2AP002 Proximity/ALS sensor"
 	depends on I2C

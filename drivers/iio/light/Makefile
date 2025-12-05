@@ -50,6 +50,7 @@ obj-$(CONFIG_ROHM_BU27034)	+= rohm-bu27034.o
 obj-$(CONFIG_RPR0521)		+= rpr0521.o
 obj-$(CONFIG_SI1133)		+= si1133.o
 obj-$(CONFIG_SI1145)		+= si1145.o
+obj-$(CONFIG_IIO_SPRD_SHUB_LIGHT) += sprd_shub_light.o
 obj-$(CONFIG_STK3310)          += stk3310.o
 obj-$(CONFIG_ST_UVIS25)		+= st_uvis25_core.o
 obj-$(CONFIG_ST_UVIS25_I2C)	+= st_uvis25_i2c.o
