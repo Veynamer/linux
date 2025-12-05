@@ -55,6 +55,10 @@ config HX9023S
 	  To compile this driver as a module, choose M here: the
 	  module will be called hx9023s.
 
+config IIO_SPRD_SHUB_PROXIMITY
+	tristate "Unisoc sensor hub proximity sensor driver"
+	depends on IIO_SPRD_SHUB
+
 config IRSD200
 	tristate "Murata IRS-D200 PIR sensor"
 	select IIO_BUFFER
