@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config IIO_SPRD_SHUB
+	tristate "Unisoc sensor hub support"
+	depends on ARCH_SPRD || COMPILE_TEST
+	depends on RPMSG
+	select IIO_BUFFER
+	select IIO_KFIFO_BUFFER
+	help
+	  This module exposes the sensor hub on the PMSYS coprocessor found
+	  in Unisoc SoCs as an IIO device.

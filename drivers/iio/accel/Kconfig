@@ -424,6 +424,10 @@ config IIO_CROS_EC_ACCEL_LEGACY
 	  Sensor data is retrieved through IO memory.
 	  Newer devices should use IIO_CROS_EC_SENSORS.
 
+config IIO_SPRD_SHUB_ACCEL
+	tristate "Unisoc sensor hub accelerometer driver"
+	depends on IIO_SPRD_SHUB
+
 config IIO_ST_ACCEL_3AXIS
 	tristate "STMicroelectronics accelerometers 3-Axis Driver"
 	depends on (I2C || SPI_MASTER) && SYSFS
