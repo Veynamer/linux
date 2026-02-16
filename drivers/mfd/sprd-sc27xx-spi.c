@@ -57,6 +57,7 @@ struct sprd_pmic_data {
 
 static const struct mfd_cell sc2730_devices[] = {
 	MFD_CELL_OF("sc2730-adc", NULL, NULL, 0, 0, "sprd,sc2730-adc"),
+	MFD_CELL_OF("sc2730-audio-codec", NULL, NULL, 0, 0, "sprd,sc2730-audio-codec"),
 	MFD_CELL_OF("sc2730-bltc", NULL, NULL, 0, 0, "sprd,sc2730-bltc"),
 	MFD_CELL_OF("sc2730-efuse", NULL, NULL, 0, 0, "sprd,sc2730-efuse"),
 	MFD_CELL_OF("sc2730-eic", NULL, NULL, 0, 0, "sprd,sc2730-eic"),
