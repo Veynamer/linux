@@ -37,6 +37,11 @@ properties:
 
       - items:
           - enum:
+              - reeder,s19mps
+          - const: sprd,ums9230
+
+      - items:
+          - enum:
               - sprd,ums9620-2h10
           - const: sprd,ums9620
 
