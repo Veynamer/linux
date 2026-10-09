@@ -1083,6 +1083,12 @@ static const struct panfrost_compatible default_pm_rt_data = {
 	.pm_features = BIT(GPU_PM_RT),
 };
 
+/* The UMS512 DVFS clock provider coordinates the shared voltage rail. */
+static const struct panfrost_compatible ums512_data = {
+	.num_pm_domains = 1,
+	.pm_features = BIT(GPU_PM_RT),
+};
+
 static const struct panfrost_compatible amlogic_data = {
 	.num_supplies = ARRAY_SIZE(default_supplies) - 1,
 	.supply_names = default_supplies,
@@ -1176,6 +1182,7 @@ static const struct of_device_id dt_match[] = {
 	{ .compatible = "mediatek,mt8370-mali", .data = &mediatek_mt8370_data },
 	{ .compatible = "allwinner,sun50i-h616-mali", .data = &default_pm_rt_data },
 	{ .compatible = "sprd,ums9230-mali", .data = &default_pm_rt_data },
+	{ .compatible = "sprd,ums512-mali", .data = &ums512_data },
 	{}
 };
 MODULE_DEVICE_TABLE(of, dt_match);
