@@ -34,30 +34,84 @@ properties:
   "#clock-cells":
     const: 1
 
-  clocks:
-    minItems: 1
-    maxItems: 4
-    description: |
-      The input parent clock(s) phandle for the clock, only list
-      fixed clocks which are declared in devicetree.
-
-  clock-names:
-    minItems: 1
-    items:
-      - const: ext-26m
-      - const: ext-32k
-      - const: ext-4m
-      - const: rco-100m
+  power-domains:
+    maxItems: 1
 
   reg:
     maxItems: 1
+
+  "#reset-cells":
+    const: 1
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: sprd,ums512-aonapb-clk
+    then:
+      properties:
+        clocks:
+          minItems: 4
+          maxItems: 4
+        clock-names:
+          items:
+            - const: ext-26m
+            - const: ext-32k
+            - const: ext-4m
+            - const: rco-100m
+      required:
+        - clocks
+        - clock-names
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: sprd,ums512-mm-clk
+    then:
+      properties:
+        clocks:
+          minItems: 2
+          maxItems: 2
+        clock-names:
+          items:
+            - const: ext-26m
+            - const: enable
+      required:
+        - clocks
+        - clock-names
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - sprd,ums512-apahb-gate
+              - sprd,ums512-ap-clk
+              - sprd,ums512-aon-gate
+              - sprd,ums512-pmu-gate
+              - sprd,ums512-g3-pll
+              - sprd,ums512-gc-pll
+              - sprd,ums512-gpu-clk
+    then:
+      properties:
+        clocks:
+          minItems: 1
+          maxItems: 1
+        clock-names:
+          items:
+            - const: ext-26m
+      required:
+        - clocks
+        - clock-names
 
 required:
   - compatible
   - '#clock-cells'
   - reg
 
-additionalProperties: false
+unevaluatedProperties: false
 
 examples:
   - |
