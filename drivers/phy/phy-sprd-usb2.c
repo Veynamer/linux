@@ -5,6 +5,7 @@
  * Copyright (C) 2024 Otto Pflüger
  */
 
+#include <linux/delay.h>
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -37,6 +38,17 @@
 
 #define DEFAULT_EYE_PATTERN	0x04f3d1c0
 
+/* AON APB APB_EB1: module enables */
+#define BIT_AON_APB_ANA_EB		BIT(12)	/* analog PHY block clock */
+
+/* AON APB CGM_REG1: USB reference-clock gates */
+#define BIT_AON_APB_CGM_OTG_REF_EN	BIT(12)
+#define BIT_AON_APB_CGM_DPHY_REF_EN	BIT(10)
+
+/* AON APB APB_RST1: PHY/UTMI soft reset */
+#define BIT_AON_APB_OTG_PHY_SOFT_RST	BIT(9)
+#define BIT_AON_APB_OTG_UTMI_SOFT_RST	BIT(8)
+
 struct sprd_hsphy_data {
 	/* AON APB regs */
 	u32 otg_test_reg;
@@ -68,13 +80,37 @@ static int sprd_hsphy_init(struct phy *phy)
 
 	dev_dbg(hsphy->dev, "%s()\n", __func__);
 
+	/*
+	 * Enable the USB reference-clock gates. On a USB-plug boot U-Boot sets
+	 * these, which is why mainline got away without it; on a cold
+	 * (power-button) boot nothing does, leaving the PHY reference clock
+	 * dead so the gadget's EP0 never answers and the host fails every
+	 * descriptor read with -71. Mirror the vendor BSP and assert them here.
+	 */
+	if (hsphy->data->cgm_reg1)
+		regmap_set_bits(hsphy->aon_apb, hsphy->data->cgm_reg1,
+				BIT_AON_APB_CGM_OTG_REF_EN |
+				BIT_AON_APB_CGM_DPHY_REF_EN);
+
 	regmap_set_bits(hsphy->aon_apb, hsphy->data->otg_ctrl_reg,
 			BIT_AON_UTMI_WIDTH_SEL);
 	regmap_set_bits(hsphy->ana_regs, hsphy->data->utmi_ctl1_reg,
 			BIT_ANLG_USB20_DATABUS16_8);
 
-	regmap_write(hsphy->ana_regs, hsphy->data->trimming_reg,
-		     DEFAULT_EYE_PATTERN);
+	/*
+	 * Soft-reset the PHY/UTMI once, as the vendor BSP does, so a cold boot
+	 * starts from a known state instead of inheriting whatever U-Boot left
+	 * (or didn't leave). The vendor delay is 20-30ms.
+	 */
+	if (hsphy->data->apb_rst1) {
+		regmap_set_bits(hsphy->aon_apb, hsphy->data->apb_rst1,
+				BIT_AON_APB_OTG_PHY_SOFT_RST |
+				BIT_AON_APB_OTG_UTMI_SOFT_RST);
+		usleep_range(20000, 30000);
+		regmap_clear_bits(hsphy->aon_apb, hsphy->data->apb_rst1,
+				  BIT_AON_APB_OTG_PHY_SOFT_RST |
+				  BIT_AON_APB_OTG_UTMI_SOFT_RST);
+	}
 
 	return 0;
 }
@@ -89,6 +125,27 @@ static int sprd_hsphy_power_on(struct phy *phy)
 			  BIT_ANLG_USB20_ISO_SW_EN);
 	regmap_clear_bits(hsphy->ana_regs, hsphy->data->pd_reg,
 			  BIT_ANLG_USB20_PS_PD_L | BIT_ANLG_USB20_PS_PD_S);
+
+	/*
+	 * Enable the analog PHY block clock (APB_EB1.ANA_EB). Nothing else in our
+	 * USB path enables it; U-Boot does it first thing. Without the analog
+	 * clock the PHY can't drive HS signalling and EP0 answers garbage (-71).
+	 */
+	if (hsphy->data->apb_eb1)
+		regmap_set_bits(hsphy->aon_apb, hsphy->data->apb_eb1,
+				BIT_AON_APB_ANA_EB);
+
+	/* VBUS-valid (both the AON test reg and the analog VBUSVLDEXT), early. */
+	regmap_set_bits(hsphy->aon_apb, hsphy->data->otg_test_reg,
+			BIT_AON_OTG_VBUS_VALID_PHYREG);
+	regmap_set_bits(hsphy->ana_regs, hsphy->data->utmi_ctl1_reg,
+			BIT_ANLG_USB20_VBUSVLDEXT);
+
+	/* 16-bit UTMI width. */
+	regmap_set_bits(hsphy->aon_apb, hsphy->data->otg_ctrl_reg,
+			BIT_AON_UTMI_WIDTH_SEL);
+	regmap_set_bits(hsphy->ana_regs, hsphy->data->utmi_ctl1_reg,
+			BIT_ANLG_USB20_DATABUS16_8);
 
 	return 0;
 }
