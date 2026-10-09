@@ -11,6 +11,7 @@
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
 #include <linux/slab.h>
 
 #include <dt-bindings/clock/sprd,ums512-clk.h>
@@ -2192,6 +2193,18 @@ static int ums512_clk_probe(struct platform_device *pdev)
 		return -ENODEV;
 
 	ret = sprd_clk_regmap_init(pdev, desc);
+	if (ret)
+		return ret;
+
+	/*
+	 * Controllers inside switchable power domains (gpu_clk, mm_gate,
+	 * mm_clk take power-domains in DT) must not have their registers
+	 * touched while the domain is off: the clk core skips .is_enabled
+	 * and resumes the provider around prepare only when the provider
+	 * device has runtime PM enabled (mirrors ums9230_clk_probe).
+	 */
+	pm_runtime_set_active(&pdev->dev);
+	ret = devm_pm_runtime_enable(&pdev->dev);
 	if (ret)
 		return ret;
 
