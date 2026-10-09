@@ -472,6 +472,30 @@
 				clock-names = "ext-26m";
 				#clock-cells = <1>;
 			};
+
+			pmu: power-controller {
+				compatible = "sprd,ums512-power-controller";
+				#address-cells = <1>;
+				#size-cells = <0>;
+				#power-domain-cells = <1>;
+
+				power-domain@UMS512_POWER_DOMAIN_GPU_TOP {
+					reg = <UMS512_POWER_DOMAIN_GPU_TOP>;
+					clocks = <&aonapb_gate CLK_GPU_EB>;
+					#power-domain-cells = <0>;
+				};
+
+				power-domain@UMS512_POWER_DOMAIN_MM {
+					reg = <UMS512_POWER_DOMAIN_MM>;
+					clocks = <&aonapb_gate CLK_MM_EB>;
+					#power-domain-cells = <0>;
+				};
+
+				power-domain@UMS512_POWER_DOMAIN_PUBCP {
+					reg = <UMS512_POWER_DOMAIN_PUBCP>;
+					#power-domain-cells = <0>;
+				};
+			};
 		};
 
 		audcp_apb_regs: syscon@3350d000 {
@@ -486,6 +510,7 @@
 				compatible = "sprd,ums512-audcpapb-gate";
 				reg = <0x0 0x300>;
 				#clock-cells = <1>;
+				#reset-cells = <1>;
 			};
 		};
 
@@ -501,6 +526,7 @@
 				compatible = "sprd,ums512-audcpahb-gate";
 				reg = <0x0 0x300>;
 				#clock-cells = <1>;
+				#reset-cells = <1>;
 			};
 		};
 
@@ -554,6 +580,7 @@
 				compatible = "sprd,ums512-apapb-gate";
 				reg = <0x0 0x3000>;
 				#clock-cells = <1>;
+				#reset-cells = <1>;
 			};
 		};
 
