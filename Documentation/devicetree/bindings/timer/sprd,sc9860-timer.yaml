@@ -22,6 +22,7 @@ properties:
     oneOf:
       - items:
           - enum:
+              - sprd,ums512-suspend-timer
               - sprd,ums9230-suspend-timer
           - const: sprd,sc9860-suspend-timer
       - items:
