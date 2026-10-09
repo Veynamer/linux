@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 
 #include <dt-bindings/clock/sprd,ums512-clk.h>
+#include <dt-bindings/reset/sprd,ums512-reset.h>
 
 #include "common.h"
 #include "composite.h"
@@ -22,6 +23,7 @@
 #include "gate.h"
 #include "mux.h"
 #include "pll.h"
+#include "reset.h"
 
 #define UMS512_MUX_FLAG	\
 	(CLK_GET_RATE_NOCACHE | CLK_SET_RATE_NO_REPARENT)
@@ -1752,10 +1754,17 @@ static struct clk_hw_onecell_data ums512_gpu_clk_hws = {
 	.num	= CLK_GPU_CLK_NUM,
 };
 
+static struct sprd_reset_map ums512_gpu_apb_resets[] = {
+	[RESET_GPU_APB_GPU_CORE_SOFT_RST]	= { 0x0000, BIT(0), 0x1000 },
+	[RESET_GPU_APB_SYS_SOFT_RST_REQ_CORE]	= { 0x0000, BIT(1), 0x1000 },
+};
+
 static struct sprd_clk_desc ums512_gpu_clk_desc = {
 	.clk_clks	= ums512_gpu_clk,
 	.num_clk_clks	= ARRAY_SIZE(ums512_gpu_clk),
 	.hw_clks	= &ums512_gpu_clk_hws,
+	.resets		= ums512_gpu_apb_resets,
+	.num_resets	= ARRAY_SIZE(ums512_gpu_apb_resets),
 };
 
 /* mm clocks */
@@ -2176,6 +2185,7 @@ MODULE_DEVICE_TABLE(of, sprd_ums512_clk_ids);
 static int ums512_clk_probe(struct platform_device *pdev)
 {
 	const struct sprd_clk_desc *desc;
+	struct sprd_reset *reset;
 	int ret;
 
 	desc = device_get_match_data(&pdev->dev);
@@ -2185,6 +2195,25 @@ static int ums512_clk_probe(struct platform_device *pdev)
 	ret = sprd_clk_regmap_init(pdev, desc);
 	if (ret)
 		return ret;
+
+	if (desc->num_resets > 0) {
+		struct sprd_clk_drvdata *data = platform_get_drvdata(pdev);
+
+		reset = devm_kzalloc(&pdev->dev, sizeof(*reset), GFP_KERNEL);
+		if (!reset)
+			return -ENOMEM;
+
+		spin_lock_init(&reset->lock);
+		reset->rcdev.of_node = pdev->dev.of_node;
+		reset->rcdev.ops = &sprd_sc_reset_ops;
+		reset->rcdev.nr_resets = desc->num_resets;
+		reset->reset_map = desc->resets;
+		reset->regmap = data->regmap;
+
+		ret = devm_reset_controller_register(&pdev->dev, &reset->rcdev);
+		if (ret)
+			dev_warn(&pdev->dev, "Failed to register reset controller\n");
+	}
 
 	return sprd_clk_probe(&pdev->dev, desc->hw_clks);
 }
