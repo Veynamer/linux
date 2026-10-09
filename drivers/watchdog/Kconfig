@@ -1092,6 +1092,14 @@ config SPRD_WATCHDOG
 	  Say Y here to include watchdog timer supported
 	  by Spreadtrum system.
 
+config SC27XX_WATCHDOG
+	tristate "Spreadtrum SC27xx PMIC watchdog support"
+	depends on MFD_SC27XX_PMIC || COMPILE_TEST
+	select WATCHDOG_CORE
+	help
+	  Say Y here to include watchdog timer support embedded into the
+	  Spreadtrum SC27xx series PMICs.
+
 config PM8916_WATCHDOG
 	tristate "QCOM PM8916 pmic watchdog"
 	depends on OF && MFD_SPMI_PMIC
