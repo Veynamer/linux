@@ -16,6 +16,7 @@ properties:
     oneOf:
       - items:
           - enum:
+              - sprd,ums512-spi
               - sprd,ums9230-spi
           - const: sprd,sc9860-spi
       - const: sprd,sc9860-spi
