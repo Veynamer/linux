@@ -805,6 +805,8 @@ patternProperties:
     description: Shenzhen iNet Mobile Internet Technology Co., Ltd
   "^infineon,.*":
     description: Infineon Technologies
+  "^infinix,.*":
+    description: Infinix Mobility Limited
   "^inforce,.*":
     description: Inforce Computing
   "^ingenic,.*":
