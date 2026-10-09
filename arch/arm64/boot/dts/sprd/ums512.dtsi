@@ -285,6 +285,13 @@
 		interrupt-affinity = <&CPU6>, <&CPU7>;
 	};
 
+	disp: display-subsystem {
+		compatible = "sprd,display-subsystem";
+		ports = <&dpu_port>;
+
+		status = "disabled";
+	};
+
 	soc: soc {
 		compatible = "simple-bus";
 		#address-cells = <2>;
