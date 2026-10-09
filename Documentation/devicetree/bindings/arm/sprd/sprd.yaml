@@ -33,6 +33,7 @@ properties:
       - items:
           - enum:
               - sprd,ums512-1h10
+              - infinix,x6816d
           - const: sprd,ums512
 
       - items:
