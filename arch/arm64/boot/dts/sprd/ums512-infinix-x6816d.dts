@@ -37,7 +37,7 @@
 
 	chosen {
 		stdout-path = "serial1:115200n8";
-		bootargs = "earlycon";
+		bootargs = "earlycon pmos.nosplash";
 		framebuffer {
 			compatible = "simple-framebuffer";
 			memory-region = <&framebuffer_region>;
