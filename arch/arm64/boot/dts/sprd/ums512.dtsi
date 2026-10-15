@@ -1021,7 +1021,7 @@
 			compatible = "simple-bus";
 			#address-cells = <1>;
 			#size-cells = <1>;
-			ranges = <0 0 0x70000000 0x1000000>;
+			ranges = <0 0 0x70000000 0x10000000>;
 
 			uart0: serial@0 {
 				compatible = "sprd,ums512-uart",
@@ -1154,7 +1154,7 @@
 				clocks = <&apapb_gate CLK_SPI0_EB>,
 				<&ap_clk CLK_AP_SPI0>,
 				<&pll2 CLK_TWPLL_192M>;
-				clock-names = "spi", "source", "enable";
+				clock-names = "enable", "spi", "source";
 				#address-cells = <1>;
 				#size-cells = <0>;
 				status = "disabled";
@@ -1167,7 +1167,7 @@
 				clocks = <&apapb_gate CLK_SPI1_EB>,
 				<&ap_clk CLK_AP_SPI1>,
 				<&pll2 CLK_TWPLL_192M>;
-				clock-names = "spi", "source", "enable";
+				clock-names = "enable", "spi", "source";
 				#address-cells = <1>;
 				#size-cells = <0>;
 				status = "disabled";
@@ -1180,7 +1180,7 @@
 				clocks = <&apapb_gate CLK_SPI2_EB>,
 				<&ap_clk CLK_AP_SPI2>,
 				<&pll2 CLK_TWPLL_192M>;
-				clock-names = "spi", "source", "enable";
+				clock-names = "enable", "spi", "source";
 				#address-cells = <1>;
 				#size-cells = <0>;
 				status = "disabled";
@@ -1193,7 +1193,7 @@
 				clocks = <&apapb_gate CLK_SPI3_EB>,
 				<&ap_clk CLK_AP_SPI3>,
 				<&pll2 CLK_TWPLL_192M>;
-				clock-names = "spi", "source", "enable";
+				clock-names = "enable", "spi", "source";
 				#address-cells = <1>;
 				#size-cells = <0>;
 				status = "disabled";

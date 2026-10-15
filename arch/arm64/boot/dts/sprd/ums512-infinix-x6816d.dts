@@ -137,11 +137,13 @@
 	};
 };
 
+/*
 &sc2730_fgu {
 	status = "okay";
 	monitored-battery = <&bat>;
 	sprd,calib-resistance-micro-ohms = <10000>;
 };
+*/
 
 &iommu_disp {
 	status = "okay";
@@ -187,8 +189,12 @@
 
 &hsphy {
 	status = "okay";
-
 	phy-supply = <&vddusb33>;
+};
+
+&usb {
+	dr_mode = "peripheral";
+	status = "okay";
 };
 
 &i2c0 {
@@ -218,11 +224,10 @@
 
 /*
  * Battery charger. Stock uses an AW32257 (Awinic) at i2c3 0x6a, a register
- * clone of the TI bq24157/bq24158 — drive it with the mainline bq2415x driver.
- * Values from the stock dtbo overlay (charger@6a), converted to bq2415x units.
+ * clone of the TI bq24157/bq24158
  */
 &i2c3 {
-	status = "okay";
+	status = "disabled";
 	#address-cells = <1>;
 	#size-cells = <0>;
 
@@ -250,10 +255,6 @@
 	 *	   ams,tcs3430 @ 39
 	 *	   bias ocp2131 @ 3e
 	 */
-};
-
-&sc2730_codec {
-	status = "okay";
 };
 
 /* SD card */
@@ -285,6 +286,7 @@
 	sprd,phy-delay-mmc-hs400 = <0x3f 0xdf 0x2f 0x2f>;
 	sprd,phy-delay-mmc-hs200 = <0x7f 0xde 0xd4 0xd4>;
 	sprd,phy-delay-mmc-ddr52 = <0x3e 0x37 0x24 0x24>;
+	sprd,phy-delay-mmc-highspeed = <0x60 0xb7 0x34 0x34>;
 	cap-mmc-hw-reset;
 	mmc-hs400-enhanced-strobe;
 	mmc-hs400-1_8v;
@@ -308,7 +310,20 @@
 	status = "okay";
 };
 
-&usb {
+&spi2 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
 	status = "okay";
-	dr_mode = "otg";
+
+	omnivision_tcm: touchscreen@0 {
+		compatible = "omnivision_tcm-spi";
+		reg = <0>;
+
+		spi-max-frequency = <9600000>;
+
+		interrupts = <144 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-parent = <&ap_gpio>;
+		reset-gpios = <&ap_gpio 145 GPIO_ACTIVE_HIGH>;
+	};
 };

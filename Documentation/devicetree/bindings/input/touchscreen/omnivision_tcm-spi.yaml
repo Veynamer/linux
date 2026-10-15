@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: GPL-2.0
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/input/touchscreen/omnivision_tcm-spi.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Omnivision TouchComm touchscreen controller (SPI)
+
+maintainers:
+  - Veynamer <veyr1thalone@gmail.com>
+
+allOf:
+  - $ref: touchscreen.yaml#
+  - $ref: /schemas/spi/spi-peripheral-props.yaml#
+
+properties:
+  compatible:
+    const: omnivision_tcm-spi
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  reset-gpios:
+    maxItems: 1
+
+  vdd-supply:
+    description: analog power supply.
+
+required:
+  - compatible
+  - reg
+  - interrupts
+
+additionalProperties: false
