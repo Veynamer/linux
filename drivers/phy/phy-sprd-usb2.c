@@ -41,9 +41,6 @@ struct sprd_hsphy_data {
 	/* AON APB regs */
 	u32 otg_test_reg;
 	u32 otg_ctrl_reg;
-	u32 apb_eb1;	/* module enables (ANA_EB); 0 = not wired */
-	u32 cgm_reg1;	/* USB ref-clock gates; 0 = not wired */
-	u32 apb_rst1;	/* PHY soft-reset; 0 = not wired */
 
 	/* analog regs */
 	u32 pll_reg;
@@ -165,11 +162,18 @@ static const struct phy_ops sprd_hsphy_ops = {
 	.owner = THIS_MODULE,
 };
 
+static const struct regmap_config sprd_hsphy_regmap_cfg = {
+	.reg_bits = 32,
+	.val_bits = 32,
+	.reg_stride = 4,
+};
+
 static int sprd_hsphy_probe(struct platform_device *pdev)
 {
 	struct sprd_hsphy *hsphy;
 	struct phy_provider *provider;
 	struct phy *phy;
+	void __iomem *base;
 
 	hsphy = devm_kzalloc(&pdev->dev, sizeof(*hsphy), GFP_KERNEL);
 	if (!hsphy)
@@ -187,10 +191,14 @@ static int sprd_hsphy_probe(struct platform_device *pdev)
 		return dev_err_probe(hsphy->dev, PTR_ERR(hsphy->aon_apb),
 				     "failed to get AON APB syscon\n");
 
-	hsphy->ana_regs = syscon_node_to_regmap(hsphy->dev->of_node->parent);
+	base = devm_platform_get_and_ioremap_resource(pdev, 0, NULL);
+	if (IS_ERR(base))
+		return PTR_ERR(base);
+
+	hsphy->ana_regs = devm_regmap_init_mmio(hsphy->dev, base,
+						&sprd_hsphy_regmap_cfg);
 	if (IS_ERR(hsphy->ana_regs))
-		return dev_err_probe(hsphy->dev, PTR_ERR(hsphy->ana_regs),
-				     "failed to get ANLG_PHY_G2 syscon\n");
+		return PTR_ERR(hsphy->ana_regs);
 
 	phy = devm_phy_create(hsphy->dev, NULL, &sprd_hsphy_ops);
 	if (IS_ERR(phy))
@@ -223,26 +231,7 @@ static const struct sprd_hsphy_data ums9230_data = {
 	.reg_sel_mask		= BIT(2) | BIT(1),
 };
 
-static const struct sprd_hsphy_data ums512_data = {
-	/* AON APB regs */
-	.otg_test_reg		= 0x0204,
-	.otg_ctrl_reg		= 0x0208,
-	.apb_eb1		= 0x0004,
-	.cgm_reg1		= 0x0138,
-	.apb_rst1		= 0x0010,
-
-	/* analog g2 regs (offsets from anlg_phy_g2 syscon base 0x323b0000) */
-	.pll_reg		= 0x0070,	/* ISO_SW */
-	.pd_reg			= 0x005c,	/* BATTER_PLL (PS_PD_L/S) */
-	.utmi_ctl1_reg		= 0x0058,	/* UTMI_CTL1 */
-	.utmi_ctl2_reg		= 0x0060,	/* UTMI_CTL2 */
-	.trimming_reg		= 0x0064,	/* TRIMMING */
-	.reg_sel_cfg_reg	= 0x0074,	/* REG_SEL_CFG_0 */
-	.reg_sel_mask		= BIT(2) | BIT(1),
-};
-
 static const struct of_device_id sprd_hsphy_of_match[] = {
-	{ .compatible = "sprd,ums512-hsphy", .data = &ums512_data },
 	{ .compatible = "sprd,ums9230-hsphy", .data = &ums9230_data },
 	{ }
 };
