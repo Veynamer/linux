@@ -55,10 +55,22 @@ static int sprd_otg_switch_set(struct sprd_glue *glue, enum usb_role role)
 		phy_set_mode(glue->phy, PHY_MODE_USB_HOST);
 		break;
 	case USB_ROLE_DEVICE:
-		musb_set_state(musb, OTG_STATE_B_IDLE);
 		MUSB_DEV_MODE(musb);
 		phy_power_on(glue->phy);
 		phy_set_mode(glue->phy, PHY_MODE_USB_DEVICE);
+		/* This SoC's phy force-asserts VBUS with no session edge, so
+		 * start the controller and assert a peripheral session + D+
+		 * pullup ourselves so the host enumerates.
+		 */
+		musb_start(musb);
+		musb->is_active = 1;
+		musb_set_state(musb, OTG_STATE_B_PERIPHERAL);
+		musb_writeb(musb->mregs, MUSB_DEVCTL,
+			    musb_readb(musb->mregs, MUSB_DEVCTL) |
+			    MUSB_DEVCTL_SESSION);
+		musb_writeb(musb->mregs, MUSB_POWER,
+			    musb_readb(musb->mregs, MUSB_POWER) |
+			    MUSB_POWER_HSENAB | MUSB_POWER_SOFTCONN);
 		break;
 	case USB_ROLE_NONE:
 	default:
