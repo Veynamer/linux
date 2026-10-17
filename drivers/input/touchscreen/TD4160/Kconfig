@@ -1,0 +1,9 @@
+config TOUCHSCREEN_OMNIVISION_TCM
+	tristate "Omnivision TCM touchscreen (TD4160, SPI)"
+	depends on SPI
+	default n
+	help
+	  Say Y here if you have an Omnivision TCM touchscreen
+	  controller (TD4160) connected over SPI.
+
+	  If unsure, say N.
