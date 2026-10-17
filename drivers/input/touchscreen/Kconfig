@@ -714,6 +714,18 @@ config TOUCHSCREEN_NOVATEK_NVT_TS
 	  To compile this driver as a module, choose M here: the
 	  module will be called novatek-nvt-ts.
 
+config TOUCHSCREEN_OMNIVISION_TCM_SPI
+	tristate "OmniVision TCM SPI(TD4160) touchscreen"
+	depends on SPI_MASTER
+	select CRC32
+	help
+	  Say Y here for an OmniVision TCM (TD4160) touchscreen connected over SPI.
+
+	  If unsure, say N
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called omnivision_tcm_spi.
+
 config TOUCHSCREEN_IMAGIS
 	tristate "Imagis touchscreen support"
 	depends on I2C
