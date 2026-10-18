@@ -453,7 +453,22 @@ static int sc27xx_pd_set_vbus(struct tcpc_dev *tcpc, bool on, bool charge)
 
 	mutex_lock(&pd->lock);
 
-	if (!pd->vbus || pd->vbus_on == on)
+	/*
+	 * Boards without a TCPC-owned VBUS regulator drive VBUS
+	 * externally (e.g. from the USB controller's role switch).
+	 * Still schedule the status poll: no VBUS interrupts are sent,
+	 * so TCPM would otherwise never learn that VBUS came up and
+	 * would drop the source attachment on timeout.
+	 */
+	if (!pd->vbus) {
+		if (!pd->detect_pending) {
+			pd->detect_pending = true;
+			schedule_work(&pd->typec_detect_work);
+		}
+		goto out;
+	}
+
+	if (pd->vbus_on == on)
 		goto out;
 
 	pd->vbus_on = on;
@@ -512,6 +527,14 @@ static int sc27xx_pd_set_roles(struct tcpc_dev *tcpc, bool attached,
 				 pd->base + SC27XX_PD_CFG0,
 				 SC27XX_PD_SRC_SINK_MODE,
 				 role != TYPEC_SINK);
+	if (!ret) {
+		/* Roles changed (attach/detach/swap): re-poll CC/VBUS
+		 * status, VBUS has no interrupt to trigger on. */
+		if (!pd->detect_pending) {
+			pd->detect_pending = true;
+			schedule_work(&pd->typec_detect_work);
+		}
+	}
 	mutex_unlock(&pd->lock);
 
 	return ret;
@@ -1366,8 +1389,11 @@ static int sc27xx_get_vbus_status(struct sc27xx_pd *pd)
 					       SC27XX_VBUS_OK_TIMEOUT);
 		if (ret < 0) {
 			/* vbus may be off when entering source state */
-			if (pd->state == SC27XX_ATTACHED_SRC && !pd->vbus_on)
+			if (pd->state == SC27XX_ATTACHED_SRC && !pd->vbus_on) {
+				dev_dbg(pd->dev, "vbus not ok in attached-src, vbus_on=%d\n",
+					pd->vbus_on);
 				return 0;
+			}
 
 			dev_err(pd->dev, "wait for vbus failed, ret = %d\n", ret);
 			return ret;

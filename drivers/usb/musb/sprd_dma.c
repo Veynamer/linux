@@ -69,6 +69,7 @@ static struct dma_channel *dma_channel_allocate(struct dma_controller *c,
 			struct sprd_musb_dma_controller, controller);
 	struct sprd_musb_dma_channel *musb_channel = NULL;
 	struct dma_channel *channel = NULL;
+	u32 val;
 	u8 bit = hw_ep->epnum + (transmit ? 0 : 15);
 
 	if (controller->used_channels & (1 << bit))
@@ -87,6 +88,14 @@ static struct dma_channel *dma_channel_allocate(struct dma_controller *c,
 	/* Tx => mode 1; Rx => mode 0 */
 	channel->desired_mode = transmit;
 	channel->actual_len = 0;
+
+	/*
+	 * Wait 9 more cycles for ensuring DMA can get USB request length.
+	 * Without this the DMA engine may latch a wrong residual length
+	 * for received transfers.
+	 */
+	val = musb_readl(controller->base, MUSB_DMA_FRAG_WAIT);
+	musb_writel(controller->base, MUSB_DMA_FRAG_WAIT, val | 0x8);
 
 	return channel;
 }
@@ -212,8 +221,13 @@ static int dma_channel_abort(struct dma_channel *channel)
 	u8 bchannel = musb_channel->idx;
 	int offset;
 	u16 csr;
+	u32 pause;
 
 	if (channel->status == MUSB_DMA_STATUS_BUSY) {
+		pause = musb_readl(mbase, MUSB_DMA_CHN_PAUSE(bchannel));
+		pause |= CHN_CLR;
+		musb_writel(mbase, MUSB_DMA_CHN_PAUSE(bchannel), pause);
+
 		if (musb_channel->transmit) {
 			offset = musb->io.ep_offset(musb_channel->epnum,
 						MUSB_TXCSR);
@@ -251,29 +265,20 @@ static void sprd_musb_dma_complete(struct musb *musb,
 {
 	struct dma_channel *channel = &musb_channel->channel;
 	void __iomem *mbase = musb->mregs;
-	u32 dma_addr;
-
-	dma_addr = musb_readl(mbase, MUSB_DMA_CHN_ADDR(musb_channel->idx));
-
-	/* Incomplete transfers are not possible when transmitting */
-	if (musb_channel->transmit)
-		channel->actual_len = musb_channel->len;
-	else
-		channel->actual_len = dma_addr - musb_channel->start_addr;
+	u32 residual;
 
 	/*
-	 * When receiving data, dma_addr sometimes points to a location that
-	 * is not related to the current transfer. When this happens, we assume
-	 * that the transfer did not actually happen and reconfigure DMA to
-	 * receive again.
+	 * Incomplete transfers are not possible when transmitting.
+	 * For receive the channel LEN register keeps the amount of data
+	 * that was not transferred in its upper 16 bits.
 	 */
-	if (channel->actual_len > musb_channel->len) {
-		dev_warn(musb->controller,
-			 "unexpected dma_addr=%08x, start=%08x\n",
-			 dma_addr, musb_channel->start_addr);
-		configure_channel(channel, musb_channel->start_addr,
-				  musb_channel->len);
-		return;
+	if (musb_channel->transmit) {
+		channel->actual_len = musb_channel->len;
+	} else {
+		residual = musb_readl(mbase,
+				MUSB_DMA_CHN_LEN(musb_channel->idx));
+		residual = (residual & 0xffff0000) >> 16;
+		channel->actual_len = musb_channel->len - residual;
 	}
 
 	channel->status = MUSB_DMA_STATUS_FREE;

@@ -38,6 +38,9 @@ static inline void map_dma_buffer(struct musb_request *request,
 
 	request->map_state = UN_MAPPED;
 
+	if (!request->request.length)
+		return;
+
 	if (!is_dma_capable() || !musb_ep->dma)
 		return;
 
@@ -1862,11 +1865,16 @@ static int musb_gadget_start(struct usb_gadget *g,
 
 	if (musb->xceiv)
 		otg_set_peripheral(musb->xceiv->otg, &musb->g);
-	else
-		phy_set_mode(musb->phy, PHY_MODE_USB_DEVICE);
 
 	musb_set_state(musb, OTG_STATE_B_IDLE);
 	spin_unlock_irqrestore(&musb->lock, flags);
+
+	/*
+	 * phy_set_mode() takes the PHY mutex and may sleep, so it must not
+	 * be called with musb->lock held.
+	 */
+	if (!musb->xceiv)
+		phy_set_mode(musb->phy, PHY_MODE_USB_DEVICE);
 
 	musb_start(musb);
 
@@ -1914,13 +1922,18 @@ static int musb_gadget_stop(struct usb_gadget *g)
 
 	if (musb->xceiv)
 		otg_set_peripheral(musb->xceiv->otg, NULL);
-	else
-		phy_set_mode(musb->phy, PHY_MODE_INVALID);
 
 	musb->is_active = 0;
 	musb->gadget_driver = NULL;
 	musb_platform_try_idle(musb, 0);
 	spin_unlock_irqrestore(&musb->lock, flags);
+
+	/*
+	 * phy_set_mode() takes the PHY mutex and may sleep, so it must not
+	 * be called with musb->lock held.
+	 */
+	if (!musb->xceiv)
+		phy_set_mode(musb->phy, PHY_MODE_INVALID);
 
 	/*
 	 * FIXME we need to be able to register another

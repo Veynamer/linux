@@ -10,6 +10,7 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/regulator/consumer.h>
 #include <linux/usb/role.h>
 #include "musb_core.h"
 #include "sprd_dma.h"
@@ -20,6 +21,7 @@ struct sprd_glue {
 	struct platform_device *musb_pdev;
 	struct phy *phy;
 	struct clk *clk;
+	struct regulator *vbus_supply;
 	enum usb_role role;
 	struct usb_role_switch *role_sw;
 };
@@ -28,49 +30,69 @@ static int sprd_otg_switch_set(struct sprd_glue *glue, enum usb_role role)
 {
 	struct musb *musb = glue->musb;
 	u8 devctl;
+	int ret;
 
 	if (role == glue->role)
 		return 0;
 
-	devctl = musb_readb(musb->mregs, MUSB_DEVCTL);
+	dev_dbg(glue->dev, "role switch %d -> %d\n", glue->role, role);
 
+	/*
+	 * Tear down the previous session when leaving an active role.
+	 * Deliberately skipped when coming from NONE: the try-dance
+	 * (SNK_TRY/SRC_TRYWAIT) flips roles rapidly, and power-cycling
+	 * the PHY on every transition wedges it (plus unbalanced
+	 * regulator warnings). Coming from NONE the hardware is idle
+	 * by definition.
+	 */
 	if (glue->role != USB_ROLE_NONE) {
 		/* force disconnect */
 		musb->is_active = 0;
+		devctl = musb_readb(musb->mregs, MUSB_DEVCTL);
 		devctl &= ~MUSB_DEVCTL_SESSION;
 		musb_writeb(musb->mregs, MUSB_DEVCTL, devctl);
 		phy_power_off(glue->phy);
+		if (glue->role == USB_ROLE_HOST && glue->vbus_supply)
+			regulator_disable(glue->vbus_supply);
 		/* wait for disconnect event */
 		msleep(20);
 	}
 
 	switch (role) {
 	case USB_ROLE_HOST:
-		musb->is_active = 1;
-		musb_set_state(musb, OTG_STATE_A_IDLE);
-		MUSB_HST_MODE(musb);
-		devctl |= MUSB_DEVCTL_SESSION;
-		musb_writeb(musb->mregs, MUSB_DEVCTL, devctl);
-		phy_power_on(glue->phy);
-		phy_set_mode(glue->phy, PHY_MODE_USB_HOST);
-		break;
-	case USB_ROLE_DEVICE:
-		MUSB_DEV_MODE(musb);
-		phy_power_on(glue->phy);
-		phy_set_mode(glue->phy, PHY_MODE_USB_DEVICE);
-		/* This SoC's phy force-asserts VBUS with no session edge, so
-		 * start the controller and assert a peripheral session + D+
-		 * pullup ourselves so the host enumerates.
+		if (glue->vbus_supply) {
+			ret = regulator_enable(glue->vbus_supply);
+			if (ret)
+				return ret;
+		}
+		/*
+		 * musb_start() enables the controller interrupts (which
+		 * nothing else does on a manual role switch) and HS mode.
+		 * It clears SESSION, so set the session bit afterwards.
 		 */
 		musb_start(musb);
 		musb->is_active = 1;
-		musb_set_state(musb, OTG_STATE_B_PERIPHERAL);
-		musb_writeb(musb->mregs, MUSB_DEVCTL,
-			    musb_readb(musb->mregs, MUSB_DEVCTL) |
-			    MUSB_DEVCTL_SESSION);
-		musb_writeb(musb->mregs, MUSB_POWER,
-			    musb_readb(musb->mregs, MUSB_POWER) |
-			    MUSB_POWER_HSENAB | MUSB_POWER_SOFTCONN);
+		musb_set_state(musb, OTG_STATE_A_IDLE);
+		MUSB_HST_MODE(musb);
+		phy_power_on(glue->phy);
+		phy_set_mode(glue->phy, PHY_MODE_USB_HOST);
+		/* let the ANA PHY and VBUS settle before starting session */
+		msleep(100);
+		devctl = musb_readb(musb->mregs, MUSB_DEVCTL);
+		devctl |= MUSB_DEVCTL_SESSION;
+		musb_writeb(musb->mregs, MUSB_DEVCTL, devctl);
+		break;
+	case USB_ROLE_DEVICE:
+		/*
+		 * Same as on the host side: nothing enables the controller
+		 * interrupts on a role-switch by default, the gadget stack
+		 * would never see bus reset without this.
+		 */
+		musb_start(musb);
+		musb_set_state(musb, OTG_STATE_B_IDLE);
+		MUSB_DEV_MODE(musb);
+		phy_power_on(glue->phy);
+		phy_set_mode(glue->phy, PHY_MODE_USB_DEVICE);
 		break;
 	case USB_ROLE_NONE:
 	default:
@@ -312,6 +334,19 @@ static int sprd_musb_probe(struct platform_device *pdev)
 			"failed to get phy\n");
 	}
 
+	/* Optional 5V boost (e.g. charger OTG output on boards without
+	 * Type-C PD state machine). Enabled on host-role entry. */
+	glue->vbus_supply = devm_regulator_get_optional(dev, "vbus");
+	if (IS_ERR(glue->vbus_supply)) {
+		ret = PTR_ERR(glue->vbus_supply);
+		if (ret == -ENODEV) {
+			glue->vbus_supply = NULL;
+		} else {
+			return dev_err_probe(dev, ret,
+				"failed to get vbus supply\n");
+		}
+	}
+
 	platform_set_drvdata(pdev, glue);
 
 	ret = clk_prepare_enable(glue->clk);
@@ -342,10 +377,26 @@ err_device_register:
 	return ret;
 }
 
+static void sprd_musb_shutdown(struct platform_device *pdev)
+{
+	struct sprd_glue *glue = platform_get_drvdata(pdev);
+
+	if (!glue->musb)
+		return;
+
+	/*
+	 * Kill VBUS before the PMIC cuts power: a still-boosting OTG
+	 * supply back-feeds VBUS from the battery and the PMIC
+	 * charger-boots straight back up (self-wake on poweroff).
+	 */
+	sprd_otg_switch_set(glue, USB_ROLE_NONE);
+}
+
 static void sprd_musb_remove(struct platform_device *pdev)
 {
 	struct sprd_glue *glue = platform_get_drvdata(pdev);
 
+	sprd_otg_switch_set(glue, USB_ROLE_NONE);
 	platform_device_unregister(glue->musb_pdev);
 }
 
@@ -360,6 +411,7 @@ MODULE_DEVICE_TABLE(of, sprd_musb_match);
 static struct platform_driver sprd_musb_driver = {
 	.probe = sprd_musb_probe,
 	.remove = sprd_musb_remove,
+	.shutdown = sprd_musb_shutdown,
 	.driver = {
 		   .name = "musb-sprd",
 		   .of_match_table = of_match_ptr(sprd_musb_match),
