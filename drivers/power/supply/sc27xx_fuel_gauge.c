@@ -101,8 +101,15 @@ struct sc27xx_fgu_variant_data {
  * @calib_resist: the real resistance of coulomb counter chip in uOhm
  * @cap_table: capacity table with corresponding ocv
  * @resist_table: resistance percent table with corresponding temperature
+ * @temp_table: NTC voltage to temperature table, from the battery node
  * @pdata: PMIC variant register information
  */
+/* One entry of the battery node's voltage-temp-table. */
+struct sc27xx_fgu_temp_point {
+	int uv;		/* NTC divider voltage, microvolts */
+	int temp;	/* deci-celsius */
+};
+
 struct sc27xx_fgu_data {
 	struct regmap *regmap;
 	struct device *dev;
@@ -123,6 +130,8 @@ struct sc27xx_fgu_data {
 	int boot_volt;
 	int table_len;
 	int resist_table_len;
+	int temp_table_len;
+	struct sc27xx_fgu_temp_point *temp_table;
 	int cur_1000ma_adc;
 	int vol_1000mv_adc;
 	int calib_resist;
@@ -545,13 +554,98 @@ static int sc27xx_fgu_get_charge_vol(struct sc27xx_fgu_data *data, int *val)
 	return 0;
 }
 
+static int sc27xx_fgu_parse_temp_table(struct sc27xx_fgu_data *data)
+{
+	struct device_node *bat_np;
+	int len, i, ret = 0;
+	u32 *vals;
+
+	bat_np = of_parse_phandle(data->dev->of_node, "monitored-battery", 0);
+	if (!bat_np)
+		return 0;
+
+	len = of_property_count_elems_of_size(bat_np, "voltage-temp-table",
+					      sizeof(u32));
+	if (len <= 0)
+		goto out;
+
+	if (len % 2) {
+		dev_err(data->dev, "voltage-temp-table needs value pairs\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	vals = kcalloc(len, sizeof(*vals), GFP_KERNEL);
+	if (!vals) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	ret = of_property_read_u32_array(bat_np, "voltage-temp-table", vals, len);
+	if (ret) {
+		kfree(vals);
+		goto out;
+	}
+
+	data->temp_table_len = len / 2;
+	data->temp_table = devm_kcalloc(data->dev, data->temp_table_len,
+					sizeof(*data->temp_table), GFP_KERNEL);
+	if (!data->temp_table) {
+		data->temp_table_len = 0;
+		kfree(vals);
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	for (i = 0; i < data->temp_table_len; i++) {
+		data->temp_table[i].uv = (int)vals[2 * i];
+		data->temp_table[i].temp = (int)vals[2 * i + 1];
+	}
+
+	kfree(vals);
+
+out:
+	of_node_put(bat_np);
+	return ret;
+}
+
+static int sc27xx_fgu_volt_to_temp(struct sc27xx_fgu_data *data, int uv)
+{
+	int i;
+
+	if (uv >= data->temp_table[0].uv)
+		return data->temp_table[0].temp;
+
+	for (i = 1; i < data->temp_table_len; i++) {
+		int hi_uv = data->temp_table[i - 1].uv;
+		int lo_uv = data->temp_table[i].uv;
+
+		if (uv < lo_uv)
+			continue;
+
+		return data->temp_table[i].temp +
+		       mult_frac(data->temp_table[i - 1].temp -
+				 data->temp_table[i].temp,
+				 uv - lo_uv, hi_uv - lo_uv);
+	}
+
+	return data->temp_table[data->temp_table_len - 1].temp;
+}
+
 static int sc27xx_fgu_get_temp(struct sc27xx_fgu_data *data, int *temp)
 {
-	int ret;
+	int ret, val;
 
-	ret = iio_read_channel_processed(data->channel, temp);
+	ret = iio_read_channel_processed(data->channel, &val);
 	if (ret < 0)
 		return ret;
+
+	if (!data->temp_table_len) {
+		*temp = val;
+		return 0;
+	}
+
+	*temp = sc27xx_fgu_volt_to_temp(data, val * 1000);
 
 	return 0;
 }
@@ -1069,6 +1163,12 @@ static int sc27xx_fgu_hw_init(struct sc27xx_fgu_data *data)
 						      data->min_volt);
 	if (!data->alarm_cap)
 		data->alarm_cap += 1;
+
+	ret = sc27xx_fgu_parse_temp_table(data);
+	if (ret) {
+		power_supply_put_battery_info(data->battery, info);
+		return ret;
+	}
 
 	data->resist_table_len = info->resist_table_size;
 	if (data->resist_table_len > 0) {
