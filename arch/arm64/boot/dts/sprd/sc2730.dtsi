@@ -149,6 +149,11 @@
 			reg = <0x1b90>;
 		};
 
+		pmic_bc1p2: bc1p2@1b9c {
+			compatible = "sprd,sc2730-bc1p2";
+			reg = <0x1b9c>;
+		};
+
 		regulators {
 			vddcpu: dcdc-cpu {
 				regulator-name = "vddcpu";
