@@ -1017,6 +1017,15 @@ config CHARGER_SC2731
 	  Say Y here to enable support for battery charging with SC2731
 	  PMIC chips.
 
+config CHARGER_SC27XX_BC1P2
+	tristate "Spreadtrum SC27xx PMIC BC1.2 charger detection driver"
+	depends on MFD_SC27XX_PMIC || COMPILE_TEST
+	help
+	  Say Y here to enable support for the BC1.2 USB charger type
+	  detection block found in the SC27xx PMIC series. The detected
+	  type (SDP/DCP/CDP) is exposed as a power supply so a charger
+	  driver can follow the reported input current limit.
+
 config FUEL_GAUGE_SC27XX
 	tristate "Spreadtrum SC27XX fuel gauge driver"
 	depends on MFD_SC27XX_PMIC || COMPILE_TEST
