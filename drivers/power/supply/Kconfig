@@ -778,6 +778,12 @@ config CHARGER_BQ2415X
 	  You'll need this driver to charge batteries on e.g. Nokia
 	  RX-51/N900.
 
+config CHARGER_AW32207
+	tristate "Awinic AW32207 battery charger driver"
+	depends on I2C
+	help
+	  Say Y to enable support for the Awinic AW32207 battery charger.
+
 config CHARGER_BQ24190
 	tristate "TI BQ24190 battery charger driver"
 	depends on I2C
