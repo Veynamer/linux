@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# Unisoc Marlin3-Lite (SC2355) external WCN combo (Wi-Fi/BT/FM/GNSS) over SDIO.
+#
+menu "Unisoc WCN (Marlin3) device drivers"
+
+config UNISOC_WCN_BSP
+	tristate "Unisoc external WCN (Marlin3/SC2355) platform support"
+	depends on MMC && OF
+	help
+	  Platform/transport core for the Unisoc external WCN combo chip
+	  (Marlin3-Lite / SC2355) attached over SDIO: chip power sequencing,
+	  firmware download, sdiohal transport and channel mux. Wi-Fi, BT,
+	  FM and GNSS function drivers sit on top of this. Say M/Y to enable.
+
+config SC23XX
+	bool "SC23XX-family chip support"
+	depends on UNISOC_WCN_BSP
+	default UNISOC_WCN_BSP
+
+config SC2355
+	bool "SC2355 (Marlin3-Lite) chip support"
+	depends on SC23XX
+	default SC23XX
+
+config SDIOHAL
+	bool "SDIO HAL transport"
+	depends on SC23XX
+	default SC23XX
+
+config WCN_SLP
+	bool "WCN sleep/power management"
+	depends on SDIOHAL
+	default SDIOHAL
+
+endmenu

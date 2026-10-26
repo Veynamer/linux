@@ -32,8 +32,18 @@ struct sc23xx_hdr {
 #endif
 } __packed;
 
-/* sc23xx_rx_data_hdr.flags_0 */
-#define SC23XX_RX_LAST_MSDU	BIT(1)
+/*
+ * sc23xx_rx_data_hdr.flags_0. Bit layout matches the firmware's rx_msdu_desc:
+ *   bit0 first_msdu_of_buff   bit1 last_msdu_of_buff
+ *   bit4 first_msdu_of_mpdu   bit5 last_msdu_of_mpdu
+ *   bits 11-15 sta_lut_index
+ * The reorder window must advance on the last MSDU of the *MPDU* (bit5): for an
+ * A-MSDU every subframe shares one sequence number, and only the final subframe
+ * ends the MPDU. bit1 (last_msdu_of_buff) is set on essentially every frame
+ * (including each A-MSDU subframe), so using it advances the window on the
+ * first subframe and drops the rest as "old"/"duplicate" — ~loss per A-MSDU.
+ */
+#define SC23XX_RX_LAST_MSDU	BIT(5)
 #define SC23XX_RX_STA_LUT_IDX	GENMASK(15, 11)
 /* sc23xx_rx_data_hdr.flags_1 */
 #define SC23XX_RX_BROADCAST	BIT(4)
@@ -81,6 +91,13 @@ struct sc23xx_tx_data_hdr {
 
 #define SC23XX_DMA_TXC_OFFSET		0x10
 #define SC23XX_RX_DMA_HEADER_SIZE	0x1c
+
+/* Byte offset of the TX credit grant (rsvd5 in the firmware's rx_msdu_desc)
+ * within a special-data RX frame. The firmware descriptor is 28 bytes; the
+ * header mainline parses (sc23xx_rx_data_hdr) is only 22, so this is not its
+ * sizeof.
+ */
+#define SC23XX_RX_CREDIT_OFFSET		24
 
 struct sc23xx_addr {
 	__le32 l;
@@ -147,6 +164,7 @@ enum {
 	CMD_OPEN = 0x03,
 	CMD_CLOSE = 0x04,
 	CMD_POWER_SAVE = 0x05,
+	CMD_SYNC_VERSION = 0x09,
 	CMD_CONNECT = 0x0a,
 	CMD_SCAN = 0x0b,
 	CMD_SCHED_SCAN = 0x0c,
@@ -168,6 +186,7 @@ enum {
 	EVT_MGMT_FRAME = 0x83,
 	EVT_MGMT_TX_STATUS = 0x84,
 	EVT_MAC_POWER = 0xa2,
+	EVT_SDIO_FLOWCON = 0xb3,
 	EVT_BA = 0xf3,
 	EVT_STA_LUT_INDEX = 0xf5,
 	EVT_FW_PWR_DOWN = 0xfa,
