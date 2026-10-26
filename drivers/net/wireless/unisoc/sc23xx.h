@@ -18,6 +18,12 @@
 #define SC23XX_MAX_TID_NUM		16
 #define SC23XX_TX_BA_WIN_SIZE		64
 
+/* Number of TX flow-control "colors" the firmware grants credit for.
+ * Only used on chips reporting credit_capa == SC23XX_TX_WITH_CREDIT.
+ */
+#define SC23XX_TX_COLORS		4
+#define SC23XX_TX_WITH_CREDIT		0
+
 #define SC23XX_CAPA_5G			BIT(0)
 #define SC23XX_CAPA_MCC			BIT(1)
 #define SC23XX_CAPA_ACL			BIT(2)
@@ -57,6 +63,12 @@ struct sc23xx_vif;
 struct sc23xx_bus_ops {
 	int (*tx_cmd)(struct sc23xx_dev *dev, struct sk_buff *skb);
 	void (*tx_data)(struct sc23xx_dev *dev, struct sk_buff *skb);
+	/*
+	 * Optional: nudge the transport after the core replenishes TX credit,
+	 * so a transport that parked its TX path on credit starvation can
+	 * resume. NULL for transports without credit-based flow control.
+	 */
+	void (*tx_kick)(struct sc23xx_dev *dev);
 };
 
 struct sc23xx_reorder_data {
@@ -96,7 +108,13 @@ struct sc23xx_dev {
 
 	char country_code[2];
 
+	/* TX credit capability from firmware GET_INFO: 0 = with credit
+	 * (color/flow-control required), 1 = no credit.
+	 */
+	u8 credit_capa;
+
 	u8 mac_addr[ETH_ALEN];
+	bool mac_addr_random;
 	struct ieee80211_supported_band band_2ghz;
 	struct ieee80211_supported_band band_5ghz;
 	u8 max_mc_mac_addrs;
@@ -128,14 +146,60 @@ struct sc23xx_dev {
 
 	spinlock_t sta_lock;
 	struct sc23xx_sta sta[SC23XX_STA_IDX_NUM];
+
+	/* Credit-based TX flow control (credit_capa == SC23XX_TX_WITH_CREDIT).
+	 * The firmware grants per-color credits via EVT_SDIO_FLOWCON; each data
+	 * frame consumes one credit and is stamped with its color + a running
+	 * sequence number.
+	 */
+	atomic_t tx_credit[SC23XX_TX_COLORS];
+	atomic_t tx_seq;
 };
 
 void *sc23xx_alloc_device(struct device *dev, size_t size,
 			  const struct sc23xx_bus_ops *bus_ops);
 void sc23xx_free_device(struct sc23xx_dev *sdev);
 int sc23xx_load_config(struct sc23xx_dev *sdev, const char *fw_name);
+int sc23xx_load_hw_param(struct sc23xx_dev *sdev, const char *fw_name);
+int sc23xx_sync_version(struct sc23xx_dev *sdev);
+
+/* Reserve one TX credit and return its color (0..SC23XX_TX_COLORS-1), or
+ * -EBUSY if no color has credit. Used by the credit-based (SDIO) transport.
+ */
+int sc23xx_tx_reserve_credit(struct sc23xx_dev *sdev);
+void sc23xx_tx_credit_add(struct sc23xx_dev *sdev, const u8 *flow);
+
+/* True if a data frame can be sent now: either the chip needs no credit, or at
+ * least one color has a credit to spend. Used by the credit-based transport to
+ * decide whether to drain its TX backlog or park until the next grant. */
+static inline bool sc23xx_tx_credit_ready(struct sc23xx_dev *sdev)
+{
+	int i;
+
+	if (sdev->credit_capa != SC23XX_TX_WITH_CREDIT)
+		return true;
+
+	for (i = 0; i < SC23XX_TX_COLORS; i++)
+		if (atomic_read(&sdev->tx_credit[i]) > 0)
+			return true;
+
+	return false;
+}
+
+/* Wake (or stop) the netdev TX queues of every open interface. */
+void sc23xx_netif_tx(struct sc23xx_dev *sdev, bool wake);
+
+static inline u16 sc23xx_tx_seq_info(struct sc23xx_dev *sdev, int color)
+{
+	u8 seq = atomic_inc_return(&sdev->tx_seq);
+
+	/* packs as color_bit:2, seq_num:8 in the tx_data_hdr seq_info field */
+	return (color & 0x3) | (seq << 2);
+}
 int sc23xx_register_device(struct sc23xx_dev *sdev);
 void sc23xx_unregister_device(struct sc23xx_dev *sdev);
+
+int sc23xx_set_suspend(struct sc23xx_dev *sdev, bool suspend);
 
 void sc23xx_wakeup_fw(struct sc23xx_dev *sdev);
 

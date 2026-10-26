@@ -35,6 +35,7 @@ source "drivers/net/wireless/silabs/Kconfig"
 source "drivers/net/wireless/st/Kconfig"
 source "drivers/net/wireless/ti/Kconfig"
 source "drivers/net/wireless/unisoc/Kconfig"
+source "drivers/net/wireless/sprdwcn/Kconfig"
 source "drivers/net/wireless/zydas/Kconfig"
 source "drivers/net/wireless/quantenna/Kconfig"
 
