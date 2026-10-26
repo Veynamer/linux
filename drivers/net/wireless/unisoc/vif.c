@@ -3,6 +3,9 @@
  * Copyright (C) 2025 Otto Pflüger
  */
 
+#include <linux/inetdevice.h>
+#include <linux/module.h>
+
 #include "cmd.h"
 #include "txrx.h"
 #include "vif.h"
@@ -55,6 +58,41 @@ static const char *sc23xx_vif_idx_to_string(u8 idx)
 	return "unknown type";
 }
 
+/*
+ * Tell the firmware about the addresses the interface already has.
+ *
+ * The inetaddr notifier below only fires when an address is added or removed,
+ * and IPv4 addresses survive ndo_stop/ndo_open - so after "ip link set wlan0
+ * down; ip link set wlan0 up", or when an address was configured before the
+ * link came up, no event ever arrives and the firmware is never told. It then
+ * goes back to delivering no broadcast to the host, which is the failure this
+ * whole patch exists to fix. ndo_open runs under RTNL.
+ */
+static void sc23xx_notify_configured_ips(struct sc23xx_vif *vif,
+					 struct net_device *ndev)
+{
+	const struct in_ifaddr *ifa;
+	struct in_device *in_dev;
+	int ret;
+
+	if (vif->wdev.iftype != NL80211_IFTYPE_STATION &&
+	    vif->wdev.iftype != NL80211_IFTYPE_P2P_CLIENT)
+		return;
+
+	in_dev = __in_dev_get_rtnl(ndev);
+	if (!in_dev)
+		return;
+
+	in_dev_for_each_ifa_rtnl(ifa, in_dev) {
+		ret = sc23xx_cmd_notify_ip(vif, (const u8 *)&ifa->ifa_address,
+					   sizeof(ifa->ifa_address));
+		if (ret)
+			netdev_warn(ndev,
+				    "failed to notify firmware of %pI4: %d\n",
+				    &ifa->ifa_address, ret);
+	}
+}
+
 static int sc23xx_open(struct net_device *ndev)
 {
 	struct sc23xx_vif *vif = netdev_priv(ndev);
@@ -82,6 +120,8 @@ static int sc23xx_open(struct net_device *ndev)
 		return ret;
 	}
 
+	sc23xx_notify_configured_ips(vif, ndev);
+
 	return 0;
 }
 
@@ -90,6 +130,12 @@ static int sc23xx_close(struct net_device *ndev)
 	struct sc23xx_vif *vif = netdev_priv(ndev);
 	int ret;
 
+	/*
+	 * Retire any outstanding scan before cfg80211 gets NETDEV_DOWN and
+	 * finds rdev->scan_req un-notified (WARN in core.c), and before the
+	 * firmware's scan-done event can hand the stale request back.
+	 */
+	sc23xx_notify_scan_done(vif, true);
 	flush_workqueue(vif->sdev->evt_wq);
 
 	ret = sc23xx_cmd_close(vif);
@@ -159,7 +205,19 @@ static netdev_tx_t sc23xx_start_xmit(struct sk_buff *skb, struct net_device *nde
 	ndev->stats.tx_packets++;
 	ndev->stats.tx_bytes += skb->len;
 
-	sc23xx_tx_prepare(vif, skb);
+	/* 802.1X (EAPOL) frames must go through the command channel: the
+	 * firmware will not transmit a handshake frame as a plain data MSDU
+	 * before the pairwise key is installed, which stalls the 4-way
+	 * handshake. */
+	if (skb->protocol == htons(ETH_P_PAE)) {
+		sc23xx_tx_data2cmd(vif, skb);
+		return NETDEV_TX_OK;
+	}
+
+	if (sc23xx_tx_prepare(vif, skb)) {
+		dev_kfree_skb(skb);
+		return NETDEV_TX_OK;
+	}
 	sc23xx_tx_data(vif->sdev, skb);
 
 	return NETDEV_TX_OK;
@@ -240,6 +298,16 @@ struct sc23xx_vif *sc23xx_vif_new(struct sc23xx_dev *sdev, const char *name,
 	if (test_bit(SC23XX_FLAG_USE_ALT_MAC, &vif->flags))
 		mac_addr[5] ^= 0x70;
 	eth_hw_addr_set(ndev, mac_addr);
+	/*
+	 * A made-up address has to be reported as such, or userspace takes it
+	 * for a burned-in one and leaves it alone. With NET_ADDR_RANDOM set,
+	 * systemd's default MACAddressPolicy=persistent replaces it before the
+	 * interface comes up with one derived from the machine-id, so the
+	 * address - and with it the DHCP lease and every peer's ARP entry -
+	 * stops changing on each boot.
+	 */
+	if (sdev->mac_addr_random)
+		ndev->addr_assign_type = NET_ADDR_RANDOM;
 
 	ret = cfg80211_register_netdevice(ndev);
 	if (ret)
@@ -259,6 +327,7 @@ err_free_netdev:
 int sc23xx_vif_reopen(struct sc23xx_vif *vif, enum nl80211_iftype iftype)
 {
 	enum sc23xx_vif_mode mode;
+	struct sc23xx_vif *other;
 	int ret;
 	u8 idx;
 
@@ -267,12 +336,18 @@ int sc23xx_vif_reopen(struct sc23xx_vif *vif, enum nl80211_iftype iftype)
 		return ret;
 
 	mutex_lock(&vif->sdev->vif_lock);
-	/* AP interface may also act as second STA interface */
-	if (rcu_access_pointer(vif->sdev->vif[idx]) && idx == SC23XX_VIF_STA) {
+	/* AP interface may also act as second STA interface. Only fall back to
+	 * the second-STA context when a *different* vif holds the STA slot: on
+	 * a reopen this vif is already installed there itself, and demoting it
+	 * to STATION_SECOND lands it in a context the firmware cannot
+	 * authenticate in (connect times out with status 16). */
+	other = rcu_access_pointer(vif->sdev->vif[idx]);
+	if (other && other != vif && idx == SC23XX_VIF_STA) {
 		idx = SC23XX_VIF_AP;
 		mode = SC23XX_MODE_STATION_SECOND;
 	}
-	if (rcu_access_pointer(vif->sdev->vif[idx])) {
+	other = rcu_access_pointer(vif->sdev->vif[idx]);
+	if (other && other != vif) {
 		wiphy_err(vif->sdev->wiphy, "%s interface already exists\n",
 			  sc23xx_vif_idx_to_string(idx));
 		mutex_unlock(&vif->sdev->vif_lock);
@@ -281,13 +356,15 @@ int sc23xx_vif_reopen(struct sc23xx_vif *vif, enum nl80211_iftype iftype)
 
 	if (!test_bit(SC23XX_FLAG_OPENED, &vif->flags)) {
 		ret = sc23xx_cmd_close(vif);
-		if (ret)
+		if (ret) {
+			mutex_unlock(&vif->sdev->vif_lock);
 			return ret;
+		}
 	}
 
-	vif->idx = idx;
 	rcu_assign_pointer(vif->sdev->vif[vif->idx], NULL);
 	rcu_assign_pointer(vif->sdev->vif[idx], vif);
+	vif->idx = idx;
 	mutex_unlock(&vif->sdev->vif_lock);
 
 	vif->wdev.iftype = iftype;
@@ -326,3 +403,54 @@ struct sc23xx_vif *sc23xx_get_vif(struct sc23xx_dev *sdev, int idx)
 
 	return vif;
 }
+
+/*
+ * Hand the station's IPv4 address to the firmware once the stack configures
+ * it (CMD_NOTIFY_IP_ACQUIRED). The vendor driver does this from the same
+ * notifier; without it the firmware never learns the host's address.
+ */
+static int sc23xx_inetaddr_event(struct notifier_block *nb,
+				 unsigned long event, void *ptr)
+{
+	struct in_ifaddr *ifa = ptr;
+	struct net_device *ndev = ifa->ifa_dev->dev;
+	struct sc23xx_vif *vif;
+	int ret;
+
+	if (ndev->netdev_ops != &sc23xx_netdev_ops || event != NETDEV_UP)
+		return NOTIFY_DONE;
+
+	vif = netdev_priv(ndev);
+	if (vif->wdev.iftype != NL80211_IFTYPE_STATION &&
+	    vif->wdev.iftype != NL80211_IFTYPE_P2P_CLIENT)
+		return NOTIFY_DONE;
+	if (!test_bit(SC23XX_FLAG_OPENED, &vif->flags))
+		return NOTIFY_DONE;
+
+	ret = sc23xx_cmd_notify_ip(vif, (const u8 *)&ifa->ifa_address,
+				   sizeof(ifa->ifa_address));
+	if (ret)
+		netdev_warn(ndev, "failed to notify firmware of %pI4: %d\n",
+			    &ifa->ifa_address, ret);
+	else
+		netdev_dbg(ndev, "notified firmware of %pI4\n",
+			   &ifa->ifa_address);
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block sc23xx_inetaddr_nb = {
+	.notifier_call = sc23xx_inetaddr_event,
+};
+
+static int __init sc23xx_vif_init(void)
+{
+	return register_inetaddr_notifier(&sc23xx_inetaddr_nb);
+}
+module_init(sc23xx_vif_init);
+
+static void __exit sc23xx_vif_exit(void)
+{
+	unregister_inetaddr_notifier(&sc23xx_inetaddr_nb);
+}
+module_exit(sc23xx_vif_exit);

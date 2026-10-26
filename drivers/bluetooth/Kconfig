@@ -479,6 +479,20 @@ config BT_SPRDSIPC
 	  Say Y here to compile support for HCI over Unisoc SIPC into the
 	  kernel or say M to compile as a module.
 
+config BT_SPRDSDIO
+	tristate "Unisoc SDIO (Marlin3) based HCI support"
+	depends on BT_HCIUART
+	depends on UNISOC_WCN_BSP
+	select BT_HCIUART_H4
+	help
+	  Unisoc SDIO based HCI driver for the external Marlin3-Lite (SC2355)
+	  WCN combo. Registers a native hci0 over the sprdwcn SDIO mchn bus
+	  (the same bus used by the Wi-Fi driver), performing the Unisoc
+	  pskey/RF/enable vendor-command init sequence in-kernel.
+
+	  Say Y here to compile support for HCI over the Unisoc SDIO WCN
+	  combo into the kernel or say M to compile as a module.
+
 config BT_HCIRSI
 	tristate
 	help

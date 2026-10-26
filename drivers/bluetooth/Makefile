@@ -25,10 +25,14 @@ obj-$(CONFIG_BT_MTKSDIO)	+= btmtksdio.o
 obj-$(CONFIG_BT_MTKUART)	+= btmtkuart.o
 obj-$(CONFIG_BT_QCOMSMD)	+= btqcomsmd.o
 obj-$(CONFIG_BT_SPRDSIPC)	+= btsprdsipc.o
+obj-$(CONFIG_BT_SPRDSDIO)	+= btsprdsdio.o
 obj-$(CONFIG_BT_BCM)		+= btbcm.o
 obj-$(CONFIG_BT_RTL)		+= btrtl.o
 obj-$(CONFIG_BT_QCA)		+= btqca.o
 obj-$(CONFIG_BT_MTK)		+= btmtk.o
+
+btsprdsdio-y := btsprd_hci.o btsprd_ini.o
+CFLAGS_btsprd_hci.o += -I$(srctree)/drivers/net/wireless/sprdwcn/include
 
 obj-$(CONFIG_BT_VIRTIO)		+= virtio_bt.o
 obj-$(CONFIG_BT_NXPUART)	+= btnxpuart.o
