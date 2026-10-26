@@ -14,6 +14,7 @@ if WLAN_VENDOR_UNISOC
 
 config SC23XX_CORE
 	tristate
+	select CRC16
 
 config SC23XX_SIPC
 	tristate "Unisoc UMW26xx/SC23xx series integrated WiFi support"
@@ -24,5 +25,16 @@ config SC23XX_SIPC
 	  This driver implements support for WiFi on Unisoc SoCs with an
 	  integrated wireless controller combined with an SC23xx-series
 	  chip.
+
+config SC23XX_SDIO
+	tristate "Unisoc SC2355 external SDIO WiFi support"
+	depends on CFG80211
+	depends on UNISOC_WCN_BSP
+	select SC23XX_CORE
+	help
+	  This driver implements support for WiFi on an external Unisoc
+	  SC2355 (Marlin3-Lite) WiFi/BT combo chip attached over SDIO,
+	  using the sprdwcn BSP bus (sdiohal) for transport and firmware
+	  download.
 
 endif
