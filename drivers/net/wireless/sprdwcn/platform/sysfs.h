@@ -1,0 +1,48 @@
+/*
+ * This file is part of wcn platform
+ */
+
+#ifndef __SYSFS_H__
+#define __SYSFS_H__
+
+#include <misc/wcn_bus.h>
+
+#define WCN_UEVENT_SOURCE	"SOURCE=wcnmarlin"
+#define WCN_UEVENT_FW_ERRO	"EVENT=FW_ERROR"
+#define WCN_UEVENT_REASON	"REASON="
+
+#define WCN_SYSFS_LOGLEVEL_SET_BIT   BIT(0)
+#define WCN_AT_RSP_RAW_FLAG          0xFFFFFFFF
+
+struct wcn_sysfs_info {
+	void *p;
+	size_t len;
+	struct mutex mutex;
+	struct completion cmd_completion;
+	atomic_t set_mask;
+	char sw_ver_buf[128];
+	size_t sw_ver_len;
+	unsigned char armlog_status;
+	unsigned char loglevel;
+	enum wcn_source_type slpinfo_sys;
+};
+
+extern struct wcn_sysfs_info sysfs_info;
+
+int notify_at_cmd_finish(void *buf, size_t len);
+void wcn_notify_fw_error(enum wcn_source_type type, char *buf);
+void wcn_firmware_init_wq(struct work_struct *work);
+int wcn_firmware_init(void);
+int init_wcn_sysfs(void);
+void exit_wcn_sysfs(void);
+void wcn_send_atcmd_lock(void);
+int wcn_send_atcmd(void *cmd, size_t cmd_len,
+			void *response, size_t *response_len);
+void wcn_send_atcmd_unlock(void);
+char *__wcn_get_sw_ver(void);
+int wcn_fw_armlog_set(unsigned int enable);
+int wcn_fw_armlog_get(char *buf, size_t size);
+int wcn_fw_loglevel_set(unsigned int level);
+int wcn_fw_loglevel_get(char *buf, size_t size);
+
+#endif

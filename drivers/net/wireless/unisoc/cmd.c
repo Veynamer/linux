@@ -3,6 +3,9 @@
  * Copyright (C) 2025 Otto Pflüger
  */
 
+#include <linux/crc16.h>
+#include <linux/random.h>
+
 #include "cmd.h"
 #include "txrx.h"
 #include "vif.h"
@@ -114,7 +117,12 @@ static int sc23xx_send_cmd_wait(struct sc23xx_dev *sdev, struct sk_buff *skb,
 	int ret;
 
 	hdr = (void *)skb->data;
-	wiphy_dbg(sdev->wiphy, "command %d\n", hdr->cmd);
+	if (skb->len > sizeof(*hdr))
+		wiphy_dbg(sdev->wiphy, "command %d (subcmd %d, len %u)\n",
+			  hdr->cmd, ((u8 *)skb->data)[sizeof(*hdr)], skb->len);
+	else
+		wiphy_dbg(sdev->wiphy, "command %d (len %u)\n",
+			  hdr->cmd, skb->len);
 
 	mutex_lock(&sdev->cmd_lock);
 
@@ -166,6 +174,121 @@ out:
 	mutex_unlock(&sdev->cmd_lock);
 
 	return ret;
+}
+
+/*
+ * Number of pad bytes the firmware requires in front of the embedded TX
+ * descriptor in a CMD_TX_DATA command: the descriptor (11 bytes) plus this
+ * pad must total 16. The vendor driver fills it with a don't-care marker.
+ */
+#define SC23XX_DATA2CMD_PAD	5
+
+static void sc23xx_tx_data2cmd_work(struct work_struct *work)
+{
+	struct sc23xx_data2cmd *dc =
+		container_of(work, struct sc23xx_data2cmd, work);
+	struct sk_buff *skb;
+
+	skb = sc23xx_cmd_alloc_skb(CMD_TX_DATA, dc->skb->len, dc->ctx_id);
+	if (skb) {
+		skb_put_data(skb, dc->skb->data, dc->skb->len);
+		sc23xx_send_cmd_wait(dc->sdev, skb, NULL, 0);
+	}
+
+	dev_kfree_skb_any(dc->skb);
+	kfree(dc);
+}
+
+/*
+ * Transmit an 802.1X (EAPOL) frame through the command channel instead of the
+ * data plane. Before the pairwise key is installed the firmware refuses to
+ * transmit a handshake frame handed to it as an ordinary data MSDU, so the
+ * 4-way handshake stalls (the AP keeps retransmitting message 1 and eventually
+ * gives up with reason=2). The vendor driver routes EAPOL/WAPI frames via
+ * CMD_TX_DATA; mirror that here.
+ *
+ * Called from ndo_start_xmit with softirqs disabled, so the actual (sleeping)
+ * command send is deferred to the event workqueue. The command payload is
+ * [pad][tx_data_hdr][802.3 frame], matching sc2355_hif_fill_msdu_dscr().
+ */
+void sc23xx_tx_data2cmd(struct sc23xx_vif *vif, struct sk_buff *skb)
+{
+	static const u8 pad_marker[SC23XX_DATA2CMD_PAD] = "01234";
+	struct sc23xx_dev *sdev = vif->sdev;
+	struct ethhdr *ethhdr = (void *)skb->data;
+	struct sc23xx_tx_data_hdr *hdr;
+	struct sc23xx_data2cmd *dc;
+	unsigned long flags;
+	u16 pkt_len = skb->len;
+	u8 lut_index = 0;
+	u8 *pad;
+	int i;
+
+	dc = kmalloc(sizeof(*dc), GFP_ATOMIC);
+	if (!dc)
+		goto drop;
+
+	/* Resolve the hardware STA LUT index the same way the data path does. */
+	spin_lock_irqsave(&sdev->sta_lock, flags);
+	for (i = SC23XX_STA_IDX_MIN; i <= SC23XX_STA_IDX_MAX; i++) {
+		struct sc23xx_sta *sta = &sdev->sta[i - SC23XX_STA_IDX_MIN];
+
+		if (!sta->valid || sta->ctx_id != vif->idx)
+			continue;
+
+		/* use first entry as fallback in STA mode */
+		if (vif->mode != SC23XX_MODE_AP && !lut_index)
+			lut_index = i;
+
+		if (!memcmp(sta->addr, ethhdr->h_dest, ETH_ALEN)) {
+			lut_index = i;
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&sdev->sta_lock, flags);
+
+	if (!lut_index && vif->mode == SC23XX_MODE_AP)
+		lut_index = SC23XX_STA_IDX_AP_MULTICAST;
+
+	/*
+	 * The firmware asserts (module_id=7 vdev op on sta_idx=0 -> reset) if we
+	 * hand it a unicast frame stamped with an unresolved LUT index. The
+	 * vendor rejects the frame in this case; do the same rather than ship a
+	 * bogus sta_idx=0.
+	 */
+	if (lut_index < SC23XX_STA_IDX_MIN) {
+		wiphy_warn(sdev->wiphy,
+			   "EAPOL TX dropped: no STA LUT index for %pM (mode %d)\n",
+			   ethhdr->h_dest, vif->mode);
+		kfree(dc);
+		goto drop;
+	}
+
+	wiphy_dbg(sdev->wiphy, "EAPOL TX via cmd: dst=%pM lut_index=%u\n",
+		  ethhdr->h_dest, lut_index);
+
+	/* Prepend the TX descriptor (type CMD, no color/seq/credit). */
+	hdr = skb_push(skb, sizeof(*hdr));
+	memset(hdr, 0, sizeof(*hdr));
+	hdr->common.type = SC23XX_HDR_TYPE_CMD;
+	hdr->common.ctx_id = vif->idx;
+	hdr->offset = sizeof(*hdr);
+	hdr->pkt_len = cpu_to_le16(pkt_len);
+	hdr->sta_lut_index = lut_index;
+
+	/* Prepend the firmware's required pad in front of the descriptor. */
+	pad = skb_push(skb, SC23XX_DATA2CMD_PAD);
+	memcpy(pad, pad_marker, SC23XX_DATA2CMD_PAD);
+
+	dc->sdev = sdev;
+	dc->ctx_id = vif->idx;
+	dc->skb = skb;
+	INIT_WORK(&dc->work, sc23xx_tx_data2cmd_work);
+	queue_work(sdev->evt_wq, &dc->work);
+	return;
+
+drop:
+	dev_kfree_skb_any(skb);
 }
 
 int sc23xx_cmd_open(struct sc23xx_vif *vif, const u8 *mac_addr)
@@ -284,9 +407,15 @@ int sc23xx_cmd_connect(struct sc23xx_vif *vif, struct cfg80211_connect_params *s
 			return ret;
 	}
 
-	ret = sc23xx_cmd_set_ie(vif, SC23XX_IE_ASSOC_REQ, sme->ie, sme->ie_len);
-	if (ret)
-		return ret;
+	/* The firmware rejects a zero-length IE blob with ARG_ERROR, failing
+	 * the whole connect. No extra assoc IEs is valid (e.g. iw's plain
+	 * open-system connect), so only send the command when there are any. */
+	if (sme->ie_len) {
+		ret = sc23xx_cmd_set_ie(vif, SC23XX_IE_ASSOC_REQ, sme->ie,
+					sme->ie_len);
+		if (ret)
+			return ret;
+	}
 
 	skb = sc23xx_cmd_alloc_skb(CMD_CONNECT, sizeof(*req), vif->idx);
 	if (!skb)
@@ -642,6 +771,8 @@ int sc23xx_cmd_mgmt_tx(struct sc23xx_vif *vif, struct cfg80211_mgmt_tx_params *p
 	if (!skb)
 		return -ENOMEM;
 
+	*cookie = get_random_u64();
+
 	req = skb_put(skb, sizeof(*req));
 	req->chan = params->chan->hw_value;
 	req->dont_wait_for_ack = params->dont_wait_for_ack;
@@ -671,6 +802,25 @@ int sc23xx_cmd_set_multicast(struct sc23xx_vif *vif)
 
 	netdev_for_each_mc_addr(ha, ndev)
 		skb_put_data(skb, ha->addr, ETH_ALEN);
+
+	return sc23xx_send_cmd_wait(vif->sdev, skb, NULL, 0);
+}
+
+/*
+ * Tell the firmware the interface's IP address. The vendor driver sends this
+ * from an inetaddr notifier as soon as the address is configured; the
+ * payload is just the raw address, 4 bytes for IPv4 and 16 for IPv6, and the
+ * firmware tells them apart by length.
+ */
+int sc23xx_cmd_notify_ip(struct sc23xx_vif *vif, const u8 *ip, u8 len)
+{
+	struct sk_buff *skb;
+
+	skb = sc23xx_cmd_alloc_skb(CMD_NOTIFY_IP_ACQUIRED, len, vif->idx);
+	if (!skb)
+		return -ENOMEM;
+
+	skb_put_data(skb, ip, len);
 
 	return sc23xx_send_cmd_wait(vif->sdev, skb, NULL, 0);
 }
@@ -834,6 +984,75 @@ int sc23xx_download_config_section(struct sc23xx_dev *sdev, u32 section,
 	return sc23xx_send_cmd_wait(sdev, skb, NULL, 0);
 }
 
+/*
+ * Marlin3-Lite (SC2355) firmware expects a trailing CRC-16 after each INI
+ * section payload and rejects the command with SC23XX_CMD_STATUS_CRC_ERROR
+ * otherwise. The polynomial is CRC-16/MODBUS (0xA001, seed 0xFFFF), which is
+ * exactly the kernel's crc16(). The CRC covers the section payload only, not
+ * the leading section number. Kept separate from
+ * sc23xx_download_config_section() so the integrated (SIPC) config path, whose
+ * firmware does not carry the CRC, is unaffected.
+ */
+int sc23xx_download_ini_section(struct sc23xx_dev *sdev, u32 section,
+				const void *data, u16 size)
+{
+	struct sk_buff *skb;
+
+	skb = sc23xx_cmd_alloc_skb(CMD_DOWNLOAD_INI, 4 + size + 2, 0);
+	if (!skb)
+		return -ENOMEM;
+
+	*(__le32 *)skb_put(skb, 4) = cpu_to_le32(section);
+	skb_put_data(skb, data, size);
+	*(__le16 *)skb_put(skb, 2) = cpu_to_le16(crc16(0xffff, data, size));
+
+	return sc23xx_send_cmd_wait(sdev, skb, NULL, 0);
+}
+
+/*
+ * CMD_SYNC_VERSION handshake. The SC2355 firmware negotiates a per-command
+ * API version map before it will service other commands, so this must be the
+ * first command sent after the chip is up. main_ver and the map are taken
+ * verbatim from the vendor sc2355 api_version table (MAIN_DRV_VERSION = 1).
+ */
+#define SC23XX_API_MAIN_VERSION 1
+
+static const u8 sc23xx_api_map[256] = {
+	1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1,
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+	1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0,
+};
+
+int sc23xx_sync_version(struct sc23xx_dev *sdev)
+{
+	struct sk_buff *skb;
+
+	skb = sc23xx_cmd_alloc_skb(CMD_SYNC_VERSION,
+				   4 + sizeof(sc23xx_api_map), 0);
+	if (!skb)
+		return -ENOMEM;
+
+	put_unaligned_le32(SC23XX_API_MAIN_VERSION, skb_put(skb, 4));
+	skb_put_data(skb, sc23xx_api_map, sizeof(sc23xx_api_map));
+
+	/* firmware echoes its own version map; we don't need to inspect it */
+	return sc23xx_send_cmd_wait(sdev, skb, NULL, 0);
+}
+EXPORT_SYMBOL_GPL(sc23xx_sync_version);
+
 int sc23xx_get_fw_info(struct sc23xx_dev *sdev)
 {
 	struct sk_buff *skb, *rskb;
@@ -849,6 +1068,23 @@ int sc23xx_get_fw_info(struct sc23xx_dev *sdev)
 	ret = sc23xx_send_cmd_wait(sdev, skb, &rskb, sizeof(*info_1));
 	if (ret)
 		return ret;
+
+	/*
+	 * After SEC1 (sizeof info_1) + wiphy sec2 (sizeof info_2) the response
+	 * carries a 6-byte MAC and a 1-byte credit capability (0 = TX needs
+	 * credit/color flow control, 1 = no credit). Read them before pulling.
+	 */
+	if (rskb->len > sizeof(*info_1) + sizeof(*info_2) + ETH_ALEN) {
+		const u8 *fw_mac = rskb->data + sizeof(*info_1) + sizeof(*info_2);
+
+		sdev->credit_capa = fw_mac[ETH_ALEN];
+		wiphy_dbg(sdev->wiphy, "fw_info: mac=%pM credit_capa=%s\n",
+			  fw_mac, sdev->credit_capa ? "NO_CREDIT" : "WITH_CREDIT");
+
+		if (is_zero_ether_addr(sdev->mac_addr) &&
+		    is_valid_ether_addr(fw_mac))
+			memcpy(sdev->mac_addr, fw_mac, ETH_ALEN);
+	}
 
 	info_1 = skb_pull_data(rskb, sizeof(*info_1));
 
@@ -989,6 +1225,18 @@ static void sc23xx_handle_connect(struct sc23xx_vif *vif, struct sk_buff *skb)
 
 		vif->state = SC23XX_STATE_DISCONNECTED;
 
+		/*
+		 * A connection state change resets the data path. The netdev TX
+		 * queue may have been left stopped by transport backpressure
+		 * (SDIO credit starvation) whose wake condition — draining the
+		 * backlog — can no longer be met across a disconnect/roam, since
+		 * queue state is otherwise only reset on interface up/down. Wake
+		 * it so the next association isn't wedged. Skip if the DMA path
+		 * has its own backpressure asserted (tx_blocked; never on SDIO).
+		 */
+		if (!vif->sdev->tx_blocked)
+			sc23xx_netif_tx(vif->sdev, true);
+
 		return;
 	}
 
@@ -1031,6 +1279,11 @@ static void sc23xx_handle_connect(struct sc23xx_vif *vif, struct sk_buff *skb)
 	}
 
 	vif->state = SC23XX_STATE_CONNECTED;
+
+	/* Clear any stale transport backpressure from before this (re)connect
+	 * so the fresh link starts with the TX queue running. */
+	if (!vif->sdev->tx_blocked)
+		sc23xx_netif_tx(vif->sdev, true);
 }
 
 static void sc23xx_handle_disconnect(struct sc23xx_vif *vif, struct sk_buff *skb)
@@ -1058,6 +1311,11 @@ static void sc23xx_handle_disconnect(struct sc23xx_vif *vif, struct sk_buff *skb
 	}
 
 	vif->state = SC23XX_STATE_DISCONNECTED;
+
+	/* Unwedge the TX queue in case transport backpressure left it stopped
+	 * (see sc23xx_handle_connect). */
+	if (!vif->sdev->tx_blocked)
+		sc23xx_netif_tx(vif->sdev, true);
 }
 
 static void sc23xx_handle_scan_done(struct sc23xx_vif *vif, struct sk_buff *skb)
@@ -1238,9 +1496,17 @@ static void sc23xx_handle_sta_lut_index(struct sc23xx_dev *sdev, struct sk_buff 
 	}
 	spin_unlock_irq(&sdev->sta_lock);
 
-	if (sta->ht_enabled)
-		queue_delayed_work(sdev->evt_wq, &sta->tx_ba_setup, 0);
-	else
+	/*
+	 * Do NOT set up TX block-ack here. The STA LUT event fires at
+	 * association, before the 4-way handshake and DHCP. Sending CMD_ADDBA_REQ
+	 * that early sets up an aggregation session on an unauthorized/unencrypted
+	 * link; the subsequent group-key (GTK) cipher change then resets the CP
+	 * (module_id=7 vdev op on sta_idx=0). The vendor gates TX ADDBA on
+	 * ip_acquired (post-DHCP) and drives it lazily from the data path. Until
+	 * that is ported, only tear down on invalidation; the firmware can still
+	 * request setup via the DELTXBA BA event once data is flowing.
+	 */
+	if (!sta->ht_enabled)
 		cancel_delayed_work(&sta->tx_ba_setup);
 }
 
@@ -1275,6 +1541,95 @@ static void sc23xx_handle_fw_pwr_down(struct sc23xx_vif *vif)
 	mutex_unlock(&vif->sdev->pwr_state_lock);
 }
 
+/*
+ * SC2355 credit-based flow control. The firmware grants per-color TX credits
+ * two ways, both additive: the explicit EVT_SDIO_FLOWCON event and a piggyback
+ * carried in special-data RX frames. It periodically resyncs the host by
+ * sending an all-zero FLOWCON *event*, which zeroes every color (see
+ * sc23xx_handle_flowcon) — mirrors the vendor's `ret == -1` reset path. Honour
+ * that reset: without it, grants accumulate without bound (colors we never send
+ * on climb forever), the host's credit count drifts far above the firmware's
+ * real buffer pool, and a traffic burst overruns the CP and asserts it.
+ *
+ * The vendor never decrements per frame (it relies solely on grant+reset); we
+ * additionally decrement one credit per frame in sc23xx_tx_reserve_credit,
+ * which is a strictly-safer meter within a grant window. Credits gate data TX
+ * on chips reporting credit_capa == SC23XX_TX_WITH_CREDIT.
+ */
+void sc23xx_tx_credit_add(struct sc23xx_dev *sdev, const u8 *flow)
+{
+	int i;
+
+	for (i = 0; i < SC23XX_TX_COLORS; i++)
+		if (flow[i])
+			atomic_add(flow[i], &sdev->tx_credit[i]);
+
+	/*
+	 * Credit just landed: kick the transport in case it parked its TX path
+	 * on credit starvation (see sc23xx_sdio_data_tx_thread). The atomic_add
+	 * above is ordered before the wake, so a thread re-checking
+	 * sc23xx_tx_credit_ready() after the wake sees the new credit.
+	 */
+	if (sdev->bus_ops->tx_kick)
+		sdev->bus_ops->tx_kick(sdev);
+}
+
+static void sc23xx_handle_flowcon(struct sc23xx_dev *sdev, struct sk_buff *skb)
+{
+	const u8 *flow = skb->data;
+	int i, total = 0;
+
+	if (skb->len < SC23XX_TX_COLORS) {
+		wiphy_warn(sdev->wiphy, "flow control event too short\n");
+		return;
+	}
+
+	for (i = 0; i < SC23XX_TX_COLORS; i++)
+		total += flow[i];
+
+	/*
+	 * All-zero FLOWCON event = firmware credit reset/resync: drop every
+	 * color back to zero. Grants that follow rebuild it from the firmware's
+	 * current buffer availability.
+	 */
+	if (total == 0) {
+		for (i = 0; i < SC23XX_TX_COLORS; i++)
+			atomic_set(&sdev->tx_credit[i], 0);
+		wiphy_dbg(sdev->wiphy, "flowcon reset (all-zero): credits cleared\n");
+		return;
+	}
+
+	sc23xx_tx_credit_add(sdev, flow);
+	wiphy_dbg(sdev->wiphy, "flowcon +[%u %u %u %u] now[%d %d %d %d]\n",
+		  flow[0], flow[1], flow[2], flow[3],
+		  atomic_read(&sdev->tx_credit[0]), atomic_read(&sdev->tx_credit[1]),
+		  atomic_read(&sdev->tx_credit[2]), atomic_read(&sdev->tx_credit[3]));
+}
+
+int sc23xx_tx_reserve_credit(struct sc23xx_dev *sdev)
+{
+	int i;
+
+	/*
+	 * The firmware grants credit across all four colors and expects the host
+	 * to spend it across all of them: color 0 is our STA's exclusive color,
+	 * colors 1-3 are a shared pool (unassigned while only one interface is
+	 * up). Spend color 0 first, then borrow from the shared colors when it
+	 * runs dry -- otherwise color 0 starves (refilled only by sparse FLOWCON
+	 * grants) while ~50 shared credits sit idle and we needlessly drop
+	 * frames. Mirrors the vendor's shared-credit borrow
+	 * (sprdwl_fc_get_shared_num). NOTE: this assumes a single active mode;
+	 * multi-interface (AP+STA/P2P) would need per-mode color assignment so we
+	 * don't spend a color the firmware handed to another mode.
+	 */
+	for (i = 0; i < SC23XX_TX_COLORS; i++)
+		if (atomic_dec_if_positive(&sdev->tx_credit[i]) >= 0)
+			return i;
+
+	return -EBUSY;
+}
+EXPORT_SYMBOL_GPL(sc23xx_tx_reserve_credit);
+
 void sc23xx_handle_event(struct work_struct *work)
 {
 	struct sc23xx_event *evt =
@@ -1307,6 +1662,9 @@ void sc23xx_handle_event(struct work_struct *work)
 		goto out_free;
 	case EVT_STA_LUT_INDEX:
 		sc23xx_handle_sta_lut_index(evt->sdev, evt->skb);
+		goto out_free;
+	case EVT_SDIO_FLOWCON:
+		sc23xx_handle_flowcon(evt->sdev, evt->skb);
 		goto out_free;
 	default:
 		break;
