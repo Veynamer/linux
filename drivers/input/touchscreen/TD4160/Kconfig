@@ -1,6 +1,7 @@
 config TOUCHSCREEN_OMNIVISION_TCM
 	tristate "Omnivision TCM touchscreen (TD4160, SPI)"
 	depends on SPI
+	depends on OF
 	default n
 	help
 	  Say Y here if you have an Omnivision TCM touchscreen

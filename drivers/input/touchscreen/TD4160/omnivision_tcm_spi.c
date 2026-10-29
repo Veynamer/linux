@@ -43,7 +43,7 @@ static struct ovt_tcm_bus_io bus_io;
 static struct ovt_tcm_hw_interface hw_if;
 
 static struct platform_device *ovt_tcm_spi_device;
-#ifdef CONFIG_OF
+
 static int parse_dt(struct device *dev, struct ovt_tcm_board_data *bdata)
 {
 	int retval;
@@ -270,7 +270,6 @@ static int parse_dt(struct device *dev, struct ovt_tcm_board_data *bdata)
 
 	return 0;
 }
-#endif
 
 static int ovt_tcm_spi_alloc_mem(struct ovt_tcm_hcd *tcm_hcd,
 		unsigned int count, unsigned int size)
@@ -347,10 +346,6 @@ static int ovt_tcm_spi_rmi_read(struct ovt_tcm_hcd *tcm_hcd,
 		xfer[1].len = length;
 		xfer[1].tx_buf = &buf[2];
 		xfer[1].rx_buf = data;
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
-		if (bdata->block_delay_us)
-			xfer[1].delay_usecs = bdata->block_delay_us;
-#endif
 		xfer[1].speed_hz = bdata->ubl_max_freq;
 		spi_message_add_tail(&xfer[1], &msg);
 	} else {
@@ -363,11 +358,6 @@ static int ovt_tcm_spi_rmi_read(struct ovt_tcm_hcd *tcm_hcd,
 				xfer[idx].tx_buf = &buf[2];
 				xfer[idx].rx_buf = &data[idx - 2];
 			}
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
-			xfer[idx].delay_usecs = bdata->ubl_byte_delay_us;
-			if (bdata->block_delay_us && (idx == byte_count - 1))
-				xfer[idx].delay_usecs = bdata->block_delay_us;
-#endif
 			xfer[idx].speed_hz = bdata->ubl_max_freq;
 			spi_message_add_tail(&xfer[idx], &msg);
 		}
@@ -401,9 +391,6 @@ static int ovt_tcm_spi_rmi_write(struct ovt_tcm_hcd *tcm_hcd,
 	unsigned int byte_count;
 	struct spi_message msg;
 	struct spi_device *spi = to_spi_device(tcm_hcd->pdev->dev.parent);
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
-	const struct ovt_tcm_board_data *bdata = tcm_hcd->hw_if->bdata;
-#endif
 	mutex_lock(&tcm_hcd->io_ctrl_mutex);
 
 	spi_message_init(&msg);
@@ -432,10 +419,6 @@ static int ovt_tcm_spi_rmi_write(struct ovt_tcm_hcd *tcm_hcd,
 
 	xfer[0].len = byte_count;
 	xfer[0].tx_buf = buf;
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
-	if (bdata->block_delay_us)
-		xfer[0].delay_usecs = bdata->block_delay_us;
-#endif
 	spi_message_add_tail(&xfer[0], &msg);
 
 	mode = spi->mode;
@@ -486,10 +469,6 @@ static int ovt_tcm_spi_read(struct ovt_tcm_hcd *tcm_hcd, unsigned char *data,
 		xfer[0].len = length;
 		xfer[0].tx_buf = buf;
 		xfer[0].rx_buf = data;
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
-		if (bdata->block_delay_us)
-			xfer[0].delay_usecs = bdata->block_delay_us;
-#endif
 		spi_message_add_tail(&xfer[0], &msg);
 	} else {
 		buf[0] = 0xff;
@@ -497,11 +476,6 @@ static int ovt_tcm_spi_read(struct ovt_tcm_hcd *tcm_hcd, unsigned char *data,
 			xfer[idx].len = 1;
 			xfer[idx].tx_buf = buf;
 			xfer[idx].rx_buf = &data[idx];
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
-			xfer[idx].delay_usecs = bdata->byte_delay_us;
-			if (bdata->block_delay_us && (idx == length - 1))
-				xfer[idx].delay_usecs = bdata->block_delay_us;
-#endif
 			spi_message_add_tail(&xfer[idx], &msg);
 		}
 	}
@@ -548,21 +522,12 @@ static int ovt_tcm_spi_write(struct ovt_tcm_hcd *tcm_hcd, unsigned char *data,
 		xfer[0].len = length;
 		xfer[0].tx_buf = data;
 		xfer[0].rx_buf = buf;
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
-		if (bdata->block_delay_us)
-			xfer[0].delay_usecs = bdata->block_delay_us;
-#endif
 		spi_message_add_tail(&xfer[0], &msg);
 	} else {
 		for (idx = 0; idx < length; idx++) {
 			xfer[idx].len = 1;
 			xfer[idx].tx_buf = &data[idx];
 			xfer[idx].rx_buf = &buf[idx];
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
-			xfer[idx].delay_usecs = bdata->byte_delay_us;
-			if (bdata->block_delay_us && (idx == length - 1))
-				xfer[idx].delay_usecs = bdata->block_delay_us;
-#endif
 			spi_message_add_tail(&xfer[idx], &msg);
 		}
 	}
@@ -599,7 +564,6 @@ static int ovt_tcm_spi_probe(struct spi_device *spi)
 		return -ENOMEM;
 	}
 
-#ifdef CONFIG_OF
 	hw_if.bdata = devm_kzalloc(&spi->dev, sizeof(*hw_if.bdata), GFP_KERNEL);
 	if (!hw_if.bdata) {
 		LOGE(&spi->dev,
@@ -612,9 +576,6 @@ static int ovt_tcm_spi_probe(struct spi_device *spi)
 				retval);
 		return retval;
 	}
-#else
-	hw_if.bdata = spi->dev.platform_data;
-#endif
 
 	switch (hw_if.bdata->spi_mode) {
 	case 0:
@@ -677,17 +638,11 @@ static const struct spi_device_id ovt_tcm_id_table[] = {
 };
 MODULE_DEVICE_TABLE(spi, ovt_tcm_id_table);
 
-#ifdef CONFIG_OF
 static struct of_device_id ovt_tcm_of_match_table[] = {
-	{
-		.compatible = "omnivision,tcm-spi",
-	},
-	{},
+	{ .compatible = "omnivision,tcm-spi" },
+	{ }
 };
 MODULE_DEVICE_TABLE(of, ovt_tcm_of_match_table);
-#else
-#define ovt_tcm_of_match_table NULL
-#endif
 
 static struct spi_driver ovt_tcm_spi_driver = {
 	.driver = {

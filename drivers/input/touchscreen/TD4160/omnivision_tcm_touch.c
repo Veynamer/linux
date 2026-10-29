@@ -34,17 +34,9 @@
 
 #define TYPE_B_PROTOCOL
 
-//#define REPORT_Z_MAJOR_VALUE
-#define MAX_Z_VALUE 1000
-#define MAX_MAJOR_VALUE 255
-
 #define USE_DEFAULT_TOUCH_REPORT_CONFIG
 
 #define TOUCH_REPORT_CONFIG_SIZE 128
-
-#define SUPPORT_FACE_DETECT 0
-
-#define SUPPORT_KNUCKLE_DATA_REPORT 0
 
 enum touch_status {
 	LIFT = 0,
@@ -92,10 +84,7 @@ enum touch_report_code {
 	TOUCH_TUNING_GAUSSIAN_WIDTHS = 0x80,
 	TOUCH_TUNING_SMALL_OBJECT_PARAMS,
 	TOUCH_TUNING_0D_BUTTONS_VARIANCE,
-#if SUPPORT_KNUCKLE_DATA_REPORT
-	TOUCH_KNUCKLE_DATA = 0xca,
-#endif
-  TOUCH_REPORT_PALM_DETECTED = 200,
+	TOUCH_REPORT_PALM_DETECTED = 200,
 };
 
 struct object_data {
@@ -115,9 +104,6 @@ struct input_params {
 	unsigned int max_objects;
 };
 
-#if SUPPORT_KNUCKLE_DATA_REPORT
-#define KNUCKLE_DATA_SIZE 102
-#endif
 struct touch_data {
 	struct object_data *object_data;
 	unsigned int timestamp;
@@ -135,9 +121,6 @@ struct touch_data {
 	unsigned int fd_data;
 	unsigned int force_data;
 	unsigned int fingerprint_area_meet;
-#if SUPPORT_KNUCKLE_DATA_REPORT
-	unsigned char knuckle_data[KNUCKLE_DATA_SIZE];
-#endif
 	unsigned int palm_status;
 };
 
@@ -160,9 +143,6 @@ struct touch_hcd {
 };
 
 static struct touch_hcd *touch_hcd;
-#if SUPPORT_FACE_DETECT
-static int ovt_check_face_state(int current_face_state);
-#endif
 /**
  * touch_free_objects() - Free all touch objects
  *
@@ -182,10 +162,6 @@ static void touch_free_objects(void)
 #ifdef TYPE_B_PROTOCOL
 	for (idx = 0; idx < touch_hcd->max_objects; idx++) {
 		input_mt_slot(touch_hcd->input_dev, idx);
-#ifdef REPORT_Z_MAJOR_VALUE
-		input_report_abs(touch_hcd->input_dev, ABS_MT_PRESSURE, 0);
-		input_report_abs(touch_hcd->input_dev, ABS_MT_TOUCH_MAJOR, 0);
-#endif
 		input_mt_report_slot_state(touch_hcd->input_dev,
 				MT_TOOL_FINGER, 0);
 	}
@@ -206,6 +182,9 @@ static void touch_free_objects(void)
 
 /**
  * touch_get_report_data() - Retrieve data from touch report
+ * @offset: bit offset into the touch report
+ * @bits: number of bits to read
+ * @data: output buffer for the retrieved data
  *
  * Retrieve data from the touch report based on the bit offset and bit length
  * information from the touch report configuration.
@@ -650,19 +629,6 @@ static int touch_parse_report(void)
 			bits = config_data[idx++];
 			offset += bits;
 			break;
-#if SUPPORT_KNUCKLE_DATA_REPORT
-		case TOUCH_KNUCKLE_DATA:
-			bits = config_data[idx++];
-			bits = bits | (config_data[idx++] << 8);
-			retval = secure_memcpy(&touch_data->knuckle_data[0], KNUCKLE_DATA_SIZE, &tcm_hcd->report.buffer.buf[offset/8], bits / 8, bits / 8);
-			if (retval < 0) {
-				LOGE(tcm_hcd->pdev->dev.parent,
-						"Failed to copy knuckle data\n");
-				return retval;
-			}
-			offset += bits;
-			break;
-#endif
 		default:
 			bits = config_data[idx++];
 			offset += bits;
@@ -686,10 +652,6 @@ static void touch_report(void)
 	unsigned int idx;
 	unsigned int x;
 	unsigned int y;
-#ifdef REPORT_Z_MAJOR_VALUE
-	unsigned int z;
-	unsigned int major;
-#endif
 	unsigned int temp;
 	unsigned int status;
 	unsigned int touch_count;
@@ -718,11 +680,6 @@ static void touch_report(void)
 
 	touch_data = &touch_hcd->touch_data;
 	object_data = touch_hcd->touch_data.object_data;
-
-#if SUPPORT_FACE_DETECT
-	ovt_check_face_state(touch_data->fd_data);
-	touch_data->fd_data = FACE_STATUS_NONE;
-#endif
 
 #if WAKEUP_GESTURE
 	if (touch_data->gesture_id == GESTURE_DOUBLE_TAP &&
@@ -760,10 +717,6 @@ static void touch_report(void)
 		case GLOVED_FINGER:
 			x = object_data[idx].x_pos;
 			y = object_data[idx].y_pos;
-#ifdef REPORT_Z_MAJOR_VALUE
-			z = object_data[idx].z;
-			major = (object_data[idx].x_width + object_data[idx].y_width) / 2;
-#endif
 			if (bdata->swap_axes) {
 				temp = x;
 				x = y;
@@ -786,26 +739,13 @@ static void touch_report(void)
 					ABS_MT_POSITION_X, x);
 			input_report_abs(touch_hcd->input_dev,
 					ABS_MT_POSITION_Y, y);
-#ifdef REPORT_Z_MAJOR_VALUE
-			input_report_abs(touch_hcd->input_dev,
-					ABS_MT_PRESSURE, z);
-			input_report_abs(touch_hcd->input_dev,
-					ABS_MT_TOUCH_MAJOR, major);
-#endif
 
 #ifndef TYPE_B_PROTOCOL
 			input_mt_sync(touch_hcd->input_dev);
 #endif
-
-#ifdef REPORT_Z_MAJOR_VALUE
-			LOGD(tcm_hcd->pdev->dev.parent,
-					"Finger %d: x = %d, y = %d z = %d, x_width:%d, y_width:%d\n",
-					idx, x, y, z, object_data[idx].x_width, object_data[idx].y_width);
-#else
 			LOGD(tcm_hcd->pdev->dev.parent,
 					"Finger %d: x = %d, y = %d\n",
 					idx, x, y);
-#endif
 			touch_count++;
 			break;
 		default:
@@ -848,13 +788,6 @@ static int touch_set_input_params(void)
 			ABS_MT_POSITION_X, 0, touch_hcd->max_x, 0, 0);
 	input_set_abs_params(touch_hcd->input_dev,
 			ABS_MT_POSITION_Y, 0, touch_hcd->max_y, 0, 0);
-
-#ifdef REPORT_Z_MAJOR_VALUE
-	input_set_abs_params(touch_hcd->input_dev,
-			ABS_MT_PRESSURE, 0, MAX_Z_VALUE, 0, 0);
-	input_set_abs_params(touch_hcd->input_dev,
-			ABS_MT_TOUCH_MAJOR, 0, MAX_MAJOR_VALUE, 0, 0);
-#endif
 
 	input_mt_init_slots(touch_hcd->input_dev, touch_hcd->max_objects,
 			INPUT_MT_DIRECT);
@@ -987,26 +920,6 @@ static int touch_set_input_dev(void)
 
 	return 0;
 }
-/*
-
-*/
-#if SUPPORT_FACE_DETECT
-static int ovt_check_face_state(int current_face_state)
-{
-	//static int pre_face_state = FACE_STATUS_NONE;
-	if ((current_face_state == FACE_FAR_FROM_1_2_3_CLOSE_WHEN_SCREEN_ON) ||
-		(current_face_state == FACE_FAR_FROM_1_2_3_CLOSE_WHEN_SCREEN_OFF)) {
-		//report far event
-		printk("tcm check face far\n");
-	} else if ((current_face_state == FACE_CLOSE_1_SMALL_SIGNAL) ||
-				(current_face_state == FACE_CLOSE_FROM_1_2_3_CLOSE_WHEN_SCREEN_OFF)) {
-
-		//report close event
-		printk("tcm check face close\n");
-	}
-	return 0;
-}
-#endif
 /**
  * touch_set_report_config() - Set touch report configuration
  *
@@ -1050,15 +963,6 @@ static int touch_set_report_config(void)
 #if WAKEUP_GESTURE
 	touch_hcd->out.buf[idx++] = TOUCH_GESTURE_ID;
 	touch_hcd->out.buf[idx++] = 8;
-#endif
-#if SUPPORT_FACE_DETECT
-	touch_hcd->out.buf[idx++] = TOUCH_FACE_DETECT;
-	touch_hcd->out.buf[idx++] = 8;
-#endif
-#if SUPPORT_KNUCKLE_DATA_REPORT
-	touch_hcd->out.buf[idx++] = TOUCH_KNUCKLE_DATA;
-	touch_hcd->out.buf[idx++] = (KNUCKLE_DATA_SIZE * 8) & 0xff;
-	touch_hcd->out.buf[idx++] = (KNUCKLE_DATA_SIZE * 8) >> 8;
 #endif
 	touch_hcd->out.buf[idx++] = TOUCH_REPORT_PALM_DETECTED;
 	touch_hcd->out.buf[idx++] = 8;
