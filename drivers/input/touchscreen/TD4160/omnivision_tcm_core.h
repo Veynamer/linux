@@ -39,16 +39,12 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/notifier.h>
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0))
-	#include <linux/sched/signal.h>
-#endif
+#include <linux/sched/signal.h>
 
 #include <asm/setup.h>
 #define I2C_MODULE_NAME "omniVision_tcm_i2c"
 #define SPI_MODULE_NAME "omnivision_tcm_spi"
 
-
-//#define CONFIG_OVT_CHARGER_DETECT
 struct ovt_tcm_board_data {
 	bool x_flip;
 	bool y_flip;
@@ -73,7 +69,6 @@ struct ovt_tcm_board_data {
 	const char *pwr_reg_name;
 	const char *bus_reg_name;
 };
-#define DISP_NOTIFY
 
 #define OMNIVISION_TCM_ID_PRODUCT (1 << 0)
 #define OMNIVISION_TCM_ID_VERSION 0x0300
@@ -86,8 +81,6 @@ struct ovt_tcm_board_data {
 
 #define WAKEUP_GESTURE (1)
 
-#define SPEED_UP_RESUME 0
-
 /* The chunk size RD_CHUNK_SIZE/WR_CHUNK_SIZE will not apply in HDL sensors */
 #define RD_CHUNK_SIZE 256 /* read length limit in bytes, 0 = unlimited */
 #define WR_CHUNK_SIZE 256 /* write length limit in bytes, 0 = unlimited */
@@ -97,19 +90,6 @@ struct ovt_tcm_board_data {
 #define MESSAGE_HEADER_SIZE 4
 #define MESSAGE_MARKER 0xa5
 #define MESSAGE_PADDING 0x5a
-
-/*
-#define REPORT_NOTIFIER
-*/
-
-/*
-#define WATCHDOG_SW
-*/
-#ifdef WATCHDOG_SW
-#define RUN_WATCHDOG false
-#define WATCHDOG_TRIGGER_COUNT 2
-#define WATCHDOG_DELAY_MS 1000
-#endif
 
 #define HOST_DOWNLOAD_WAIT_MS 100
 #define HOST_DOWNLOAD_TIMEOUT_MS 5000
@@ -208,9 +188,6 @@ enum module_type {
 	TCM_TESTING = 3,
 	TCM_RECOVERY = 4,
 	TCM_DIAGNOSTICS = 5,
-#ifdef CONFIG_OVT_CHARGER_DETECT
-	TCM_CHARGER_DETECT = 6,
-#endif
 	TCM_LAST,
 };
 
@@ -329,16 +306,6 @@ enum status_code {
 	STATUS_INVALID = 0xff,
 };
 
-enum face_status {
-	FACE_FAR_FROM_1_2_3_CLOSE_WHEN_SCREEN_ON = 0x00,
-	FACE_CLOSE_1_SMALL_SIGNAL = 0x01,
-	FACE_CLOSE_2_ENOUGH_SIGNAL = 0x02,
-	FACE_CLOSE_3_ENOUGH_SIGNAL = 0x03,
-	FACE_CLOSE_FROM_1_2_3_CLOSE_WHEN_SCREEN_OFF = 0x04,
-	FACE_FAR_FROM_1_2_3_CLOSE_WHEN_SCREEN_OFF = 0x05,
-	FACE_STATUS_NONE = 0x0f,
-};
-
 enum report_type {
 	REPORT_IDENTIFY = 0x10,
 	REPORT_TOUCH = 0x11,
@@ -388,13 +355,6 @@ struct ovt_tcm_helper {
 	struct work_struct work;
 	struct workqueue_struct *workqueue;
 	struct completion *helper_completion;
-};
-
-struct ovt_tcm_watchdog {
-	bool run;
-	unsigned char count;
-	struct delayed_work work;
-	struct workqueue_struct *workqueue;
 };
 
 struct ovt_tcm_buffer {
@@ -534,12 +494,8 @@ struct ovt_tcm_hcd {
 	struct delayed_work polling_work;
 	struct workqueue_struct *charger_notify_wq_ovt;
 	struct work_struct ovt_resume_work;
-#ifdef CONFIG_OVT_CHARGER_DETECT
-    struct workqueue_struct *workqueue;
-#endif
 	struct workqueue_struct *charher_workqueue;
 	struct workqueue_struct *polling_workqueue;
-	struct task_struct *notifier_thread;
 	struct notifier_block usb_notifier;
 	struct ovt_tcm_buffer in;
 	struct ovt_tcm_buffer out;
@@ -553,18 +509,10 @@ struct ovt_tcm_hcd {
 	struct ovt_tcm_touch_info touch_info;
 	struct ovt_tcm_identification id_info;
 	struct ovt_tcm_helper helper;
-#if SPEED_UP_RESUME
-	struct work_struct     speed_up_work; 
-	struct workqueue_struct *speed_up_resume_workqueue;
-#endif
 	struct work_struct     update_plug_status_work;
 	int usb_plug_status;
-	struct ovt_tcm_watchdog watchdog;
 	struct ovt_tcm_features features;
 	const struct ovt_tcm_hw_interface *hw_if;
-#ifdef CONFIG_OVT_CHARGER_DETECT
-    void *charger_detect_data;
-#endif
 	int (*reset)(struct ovt_tcm_hcd *tcm_hcd);
 	int (*reset_n_reinit)(struct ovt_tcm_hcd *tcm_hcd, bool hw, bool update_wd);
 	int (*sleep)(struct ovt_tcm_hcd *tcm_hcd, bool en);
@@ -590,7 +538,6 @@ struct ovt_tcm_hcd {
 	int (*read_flash_data)(enum flash_area area, bool run_app_firmware,
 			struct ovt_tcm_buffer *output);
 	void (*report_touch)(void);
-	void (*update_watchdog)(struct ovt_tcm_hcd *tcm_hcd, bool en);
 };
 
 struct ovt_tcm_module_cb {
@@ -598,9 +545,6 @@ struct ovt_tcm_module_cb {
 	int (*init)(struct ovt_tcm_hcd *tcm_hcd);
 	int (*remove)(struct ovt_tcm_hcd *tcm_hcd);
 	int (*syncbox)(struct ovt_tcm_hcd *tcm_hcd);
-#ifdef REPORT_NOTIFIER
-	int (*asyncbox)(struct ovt_tcm_hcd *tcm_hcd);
-#endif
 	int (*reinit)(struct ovt_tcm_hcd *tcm_hcd);
 	int (*suspend)(struct ovt_tcm_hcd *tcm_hcd);
 	int (*resume)(struct ovt_tcm_hcd *tcm_hcd);
@@ -657,12 +601,12 @@ int touch_suspend(struct ovt_tcm_hcd *tcm_hcd);
 int touch_resume(struct ovt_tcm_hcd *tcm_hcd);
 
 int device_module_init(void);
-int	reflash_module_init(void);
-int	testing_module_init(void);
-int	zeroflash_module_init(void);
-void	zeroflash_module_exit(void);
-int	diag_module_init(void);
-int	recovery_module_init(void);
+int reflash_module_init(void);
+int testing_module_init(void);
+int zeroflash_module_init(void);
+void zeroflash_module_exit(void);
+int diag_module_init(void);
+int recovery_module_init(void);
 
 static inline int ovt_tcm_rmi_read(struct ovt_tcm_hcd *tcm_hcd,
 		unsigned short addr, unsigned char *data, unsigned int length)
@@ -814,11 +758,5 @@ extern int ovt_tcm_set_func_charger_connected_en_state(unsigned short value);
 extern int ovt_tcm_set_func_face_detect_en_state(unsigned short value);
 extern int ovt_tcm_set_func_ear_phone_connected_en_state(unsigned short value);
 extern int ovt_tcm_set_func_roate_horizontal_level_en_state(unsigned short value);
-
-#ifdef CONFIG_OVT_CHARGER_DETECT
-extern int ovt_start_charger_detect(struct ovt_tcm_hcd *tcm_hcd);
-extern int ovt_stop_charger_detect(struct ovt_tcm_hcd *tcm_hcd);
-int  charger_module_init(void);
-#endif
 
 #endif
