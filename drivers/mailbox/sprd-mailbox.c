@@ -450,10 +450,16 @@ static const struct sprd_mbox_info ums9230_mbox_info = {
 	.supp_id = 6,
 };
 
+static const struct sprd_mbox_info ums512_mbox_info = {
+	.version = SPRD_MBOX_R1,
+	.supp_id = 6,
+};
+
 static const struct of_device_id sprd_mbox_of_match[] = {
 	{ .compatible = "sprd,sc9860-mailbox", .data = &sc9860_mbox_info },
 	{ .compatible = "sprd,sc9863a-mailbox", .data = &sc9863a_mbox_info },
 	{ .compatible = "sprd,ums9230-mailbox", .data = &ums9230_mbox_info },
+	{ .compatible = "sprd,ums512-mailbox", .data = &ums512_mbox_info },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, sprd_mbox_of_match);
