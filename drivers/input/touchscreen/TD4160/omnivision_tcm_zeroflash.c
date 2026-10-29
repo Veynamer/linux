@@ -41,35 +41,27 @@
 #define FW_IMAGE_NAME "X6816DRU_TD4160_TM_fw.img"
 
 #define BOOT_CONFIG_ID "BOOT_CONFIG"
-
 #define F35_APP_CODE_ID "F35_APP_CODE"
-
 #define ROMBOOT_APP_CODE_ID "ROMBOOT_APP_CODE"
 
 #define RESERVED_BYTES 14
 
 #define APP_CONFIG_ID "APP_CONFIG"
-
 #define DISP_CONFIG_ID "DISPLAY"
-
 #define OPEN_SHORT_ID "OPENSHORT"
 
 #define SYSFS_DIR_NAME "zeroflash"
 
 #define IMAGE_FILE_MAGIC_VALUE 0x4818472b
-
 #define FLASH_AREA_MAGIC_VALUE 0x7c05e516
 
 #define PDT_START_ADDR 0x00e9
-
 #define PDT_END_ADDR 0x00ee
 
 #define UBL_FN_NUMBER 0x35
 
 #define F35_CTRL3_OFFSET 18
-
 #define F35_CTRL7_OFFSET 22
-
 #define F35_WRITE_FW_TO_PMEM_COMMAND 4
 
 #define TP_RESET_TO_HDL_DELAY_MS 11
@@ -1500,9 +1492,6 @@ static struct ovt_tcm_module_cb zeroflash_module = {
 	.init = zeroflash_init,
 	.remove = zeroflash_remove,
 	.syncbox = zeroflash_syncbox,
-#ifdef REPORT_NOTIFIER
-	.asyncbox = NULL,
-#endif
 	.reinit = zeroflash_reinit,
 	.suspend = NULL,
 	.resume = NULL,
