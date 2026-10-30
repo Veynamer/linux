@@ -288,7 +288,8 @@
 #define CLK_CPHY_CFG_EN			97
 #define CLK_DEBUG_TS_EN			98
 #define CLK_ACCESS_AUD_EN		99
-#define CLK_AON_APB_GATE_NUM		(CLK_ACCESS_AUD_EN + 1)
+#define CLK_TOP_DVFS_EB			100
+#define CLK_AON_APB_GATE_NUM		(CLK_TOP_DVFS_EB + 1)
 
 #define CLK_MM_CPP_EB			0
 #define CLK_MM_JPG_EB			1
