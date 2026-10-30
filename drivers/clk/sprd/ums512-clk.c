@@ -108,10 +108,42 @@ static struct clk_hw_onecell_data ums512_pmu_gate_hws = {
 	.num = CLK_PMU_GATE_NUM,
 };
 
+static struct sprd_reset_map ums512_pmu_apb_resets[] = {
+	[RESET_PMU_APB_WTLCP_SOFT_RST]			= { 0x00b0, BIT(0), 0x1000 },
+	[RESET_PMU_APB_PUBCP_SOFT_RST]			= { 0x00b0, BIT(1), 0x1000 },
+	[RESET_PMU_APB_WTLCP_DSP_SOFT_RST]		= { 0x00b0, BIT(2), 0x1000 },
+	[RESET_PMU_APB_MM_SOFT_RST]			= { 0x00b0, BIT(3), 0x1000 },
+	[RESET_PMU_APB_GPU_SOFT_RST]			= { 0x00b0, BIT(4), 0x1000 },
+	[RESET_PMU_APB_AP_SOFT_RST]			= { 0x00b0, BIT(5), 0x1000 },
+	[RESET_PMU_APB_PUB_SOFT_RST]			= { 0x00b0, BIT(6), 0x1000 },
+	[RESET_PMU_APB_APCPU_SOFT_RST]			= { 0x00b0, BIT(7), 0x1000 },
+	[RESET_PMU_APB_SP_SYS_SOFT_RST]			= { 0x00b0, BIT(8), 0x1000 },
+	[RESET_PMU_APB_AUDCP_SYS_SOFT_RST]		= { 0x00b0, BIT(9), 0x1000 },
+	[RESET_PMU_APB_AUDCP_AUDDSP_SOFT_RST]		= { 0x00b0, BIT(10), 0x1000 },
+	[RESET_PMU_APB_CDMA_SOFT_RST]			= { 0x00b0, BIT(11), 0x1000 },
+	[RESET_PMU_APB_WTLCP_AON_SOFT_RST]		= { 0x00b0, BIT(12), 0x1000 },
+	[RESET_PMU_APB_WCDMA_AON_SOFT_RST]		= { 0x00b0, BIT(13), 0x1000 },
+	[RESET_PMU_APB_WTLCP_LDSP_SOFT_RST]		= { 0x00b0, BIT(14), 0x1000 },
+	[RESET_PMU_APB_WTLCP_TGDSP_SOFT_RST]		= { 0x00b0, BIT(15), 0x1000 },
+	[RESET_PMU_APB_AP_VSP_SOFT_RST]			= { 0x00b0, BIT(16), 0x1000 },
+	[RESET_PMU_APB_AP_VDSP_SOFT_RST]		= { 0x00b0, BIT(17), 0x1000 },
+	[RESET_PMU_APB_APCPU_CORE0_MODE_ST_SOFT_RST]	= { 0x00b0, BIT(18), 0x1000 },
+	[RESET_PMU_APB_APCPU_CORE1_MODE_ST_SOFT_RST]	= { 0x00b0, BIT(19), 0x1000 },
+	[RESET_PMU_APB_APCPU_CORE2_MODE_ST_SOFT_RST]	= { 0x00b0, BIT(20), 0x1000 },
+	[RESET_PMU_APB_APCPU_CORE3_MODE_ST_SOFT_RST]	= { 0x00b0, BIT(21), 0x1000 },
+	[RESET_PMU_APB_APCPU_CORE4_MODE_ST_SOFT_RST]	= { 0x00b0, BIT(22), 0x1000 },
+	[RESET_PMU_APB_APCPU_CORE5_MODE_ST_SOFT_RST]	= { 0x00b0, BIT(23), 0x1000 },
+	[RESET_PMU_APB_APCPU_CORE6_MODE_ST_SOFT_RST]	= { 0x00b0, BIT(24), 0x1000 },
+	[RESET_PMU_APB_APCPU_CORE7_MODE_ST_SOFT_RST]	= { 0x00b0, BIT(25), 0x1000 },
+	[RESET_PMU_APB_APCPU_CLUSTER_MODE_ST_SOFT_RST]	= { 0x00b0, BIT(26), 0x1000 },
+};
+
 static struct sprd_clk_desc ums512_pmu_gate_desc = {
 	.clk_clks	= ums512_pmu_gate_clks,
 	.num_clk_clks	= ARRAY_SIZE(ums512_pmu_gate_clks),
 	.hw_clks        = &ums512_pmu_gate_hws,
+	.resets		= ums512_pmu_apb_resets,
+	.num_resets	= ARRAY_SIZE(ums512_pmu_apb_resets),
 };
 
 /* pll clock at g0 */
