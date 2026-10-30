@@ -184,10 +184,9 @@ static int sprd_pmsys_probe(struct platform_device *pdev)
 	}
 
 	p->reset = devm_reset_control_get_optional(dev, NULL);
-	if (IS_ERR(p->reset)) {
-		dev_err(p->dev, "failed to get pmsys reset\n");
-		return PTR_ERR(p->reset);
-	}
+	if (IS_ERR(p->reset))
+		return dev_err_probe(dev, PTR_ERR(p->reset),
+				     "failed to get pmsys reset\n");
 
 	ret = devm_sprd_rproc_add_sipc_subdev(rproc, dev->of_node, &p->sipc);
 	if (ret < 0) {
