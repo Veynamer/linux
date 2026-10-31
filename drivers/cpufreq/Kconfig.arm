@@ -219,6 +219,19 @@ config ARM_SPRD_CPUFREQ_V2
 	help
 	  This adds the CPUFreq driver support for Spreadtrum/Unisoc SoCs.
 
+config ARM_SPRD_CPUFREQ_V1
+	bool "Spreadtrum/Unisoc hardware CPUFreq v1 support"
+	depends on ARCH_SPRD || COMPILE_TEST
+	depends on OF && COMMON_CLK
+	select SPRD_CPU_DVFS
+	select SPRD_UMS512_CPU_DVFS
+	default y
+	help
+	  This supports register-controlled Unisoc CPU DVFS controllers,
+	  currently UMS512/T610. CPUFreq policies use the common SoC DVFS
+	  layer with platform-specific register operations and voltage profiles.
+	  No secure-firmware DVFS service is required.
+
 config ARM_STI_CPUFREQ
 	tristate "STi CPUFreq support"
 	depends on CPUFREQ_DT

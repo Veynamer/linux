@@ -186,6 +186,8 @@ static const struct of_device_id blocklist[] __initconst = {
 	{ .compatible = "qcom,sm8550", },
 	{ .compatible = "qcom,sm8650", },
 
+	{ .compatible = "sprd,ums512", },
+
 	{ .compatible = "st,stih407", },
 	{ .compatible = "st,stih410", },
 	{ .compatible = "st,stih418", },
