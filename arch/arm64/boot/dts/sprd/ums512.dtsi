@@ -121,12 +121,12 @@
 			bits = <0 8>;
 		};
 
-		dvfs_bin_cpu0: dvfs-bin@17 {
+		cluster0_dvfs_bin: cluster0-dvfs-bin@17 {
 			reg = <0x17 0x1>;
 			bits = <0 3>;
 		};
 
-		dvfs_bin_cpu1: dvfs-bin@1b {
+		cluster1_dvfs_bin: cluster1-dvfs-bin@1b {
 			reg = <0x1b 0x1>;
 			bits = <0 3>;
 		};
@@ -279,6 +279,7 @@
 			cpu-idle-states = <&BIG_CORE_PD>;
 			#cooling-cells = <2>;
 		};
+
 	};
 
 	idle-states {

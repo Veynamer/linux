@@ -1,0 +1,159 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Unisoc UMS512 platform T610 SOC DVFS DTS file
+ *
+ * Copyright (C) 2026 Veynamer <veyr1thalone@gmail.com>
+ * Copyright (C) 2019, Unisoc Communications Inc.
+ */
+
+/ {
+	cluster0_opp: opp-table-0 {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp-614400000 {
+			opp-hz = /bits/ 64 <614400000>;
+			opp-microvolt = <753125>;
+		};
+
+		opp-768000000 {
+			opp-hz = /bits/ 64 <768000000>;
+			opp-microvolt = <753125>;
+		};
+
+		opp-962000000 {
+			opp-hz = /bits/ 64 <962000000>;
+			opp-microvolt = <753125>;
+		};
+
+		opp-1144000000 {
+			opp-hz = /bits/ 64 <1144000000>;
+			opp-microvolt = <815625>;
+		};
+
+		opp-1228800000 {
+			opp-hz = /bits/ 64 <1228800000>;
+			opp-microvolt = <846875>;
+		};
+
+		opp-1482000000 {
+			opp-hz = /bits/ 64 <1482000000>;
+			opp-microvolt = <934375>;
+		};
+
+		opp-1536000000 {
+			opp-hz = /bits/ 64 <1536000000>;
+			opp-microvolt = <953125>;
+		};
+
+		opp-1716000000 {
+			opp-hz = /bits/ 64 <1716000000>;
+			opp-microvolt = <1015625>;
+		};
+
+		opp-1820000000 {
+			opp-hz = /bits/ 64 <1820000000>;
+			opp-microvolt = <1050000>;
+		};
+	};
+
+	cluster1_opp: opp-table-1 {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp-1228800000 {
+			opp-hz = /bits/ 64 <1228800000>;
+			opp-microvolt = <820000>;
+		};
+
+		opp-1482000000 {
+			opp-hz = /bits/ 64 <1482000000>;
+			opp-microvolt = <920000>;
+		};
+
+		opp-1536000000 {
+			opp-hz = /bits/ 64 <1536000000>;
+			opp-microvolt = <940000>;
+		};
+
+		opp-1742000000 {
+			opp-hz = /bits/ 64 <1742000000>;
+			opp-microvolt = <1020000>;
+		};
+
+		opp-1820000000 {
+			opp-hz = /bits/ 64 <1820000000>;
+			opp-microvolt = <1050000>;
+		};
+	};
+};
+
+&lit_core_cluster {
+	/* sel div vol vote_scu vote_peri vote_gic mpllx */
+	lit_core_cluster_tbl = <
+		0 0 0 0 0 0 0
+		1 1 0 1 1 1 0
+		2 1 0 1 1 1 0
+		3 0 0 2 1 1 0
+		3 0 1 3 1 1 1
+		1 0 2 4 1 1 0
+		3 0 3 5 4 4 2
+		2 0 4 6 4 4 0
+		3 0 5 7 4 5 3
+		3 0 6 8 4 5 4
+		3 0 6 8 4 5 4
+	>;
+};
+
+&big_core_cluster {
+	/* sel div vol vote_scu vote_peri vote_gic mpllx */
+	big_core_cluster_tbl = <
+		0 0 0 0 0 0 0
+		1 0 0 3 1 1 0
+		3 0 1 5 4 4 0
+		2 0 2 6 4 4 0
+		3 0 3 7 4 5 1
+		3 0 4 8 4 5 2
+		3 0 4 8 4 5 2
+	>;
+};
+
+&scu_cluster {
+	/* sel div vol ace_div mpllx */
+	scu_cluster_tbl = <
+		0 0 0 0 0
+		3 0 0 1 0
+		3 0 0 1 1
+		1 0 1 1 0
+		3 0 2 1 2
+		3 0 3 1 3
+		3 0 4 1 4
+		3 0 5 1 5
+		3 0 6 1 6
+		3 0 6 1 6
+	>;
+};
+
+&periph_cluster {
+	/* sel div vol */
+	periph_cluster_tbl = <
+		0 0 0
+		1 0 0
+		2 1 1
+		3 1 1
+		2 0 1
+		3 0 5
+	>;
+};
+
+&gic_cluster {
+	/* sel div vol */
+	gic_cluster_tbl = <
+		0 0 0
+		1 0 0
+		2 1 1
+		3 1 1
+		2 0 1
+		3 0 1
+	>;
+};

@@ -1,0 +1,164 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Unisoc UMS512 SoC CPUFREQ DVFS DTS file
+ *
+ * Copyright (C) 2026 Veynamer <veyr1thalone@gmail.com>
+ */
+
+/ {
+	cpufreq: cpufreq {
+		compatible = "sprd,cpufreq-v1";
+		#performance-domain-cells = <1>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		status = "disabled";
+
+		cluster0: cluster@0 {
+			reg = <0>;
+			sprd,hw-dvfs-device = <&cpudvfs_dev>;
+			transition_delay_us = <500>;
+		};
+
+		cluster1: cluster@1 {
+			reg = <1>;
+			sprd,hw-dvfs-device = <&cpudvfs_dev>;
+			transition_delay_us = <500>;
+		};
+	};
+
+
+	dvfs_dcdc_cpu0_cfg: dvfs-dcdc-cpu0-cfg {
+		pmic-type-num = <0>;
+		slew-rate = <9375>; /* uV/us */
+		tuning-latency-us = <0>;
+	};
+
+	dvfs_dcdc_cpu1_cfg: dvfs-dcdc-cpu1-cfg {
+		third-pmic-used;
+		chnl-i2c-used;
+		pmic-type-num = <2>;
+		slew-rate = <4000>; /* uV/us */
+		tuning-latency-us = <0>;
+	};
+};
+
+&soc {
+	cpudvfs_dev: cpudvfs-dev@322a8000 {
+		compatible = "sprd,ums512-cpudvfs";
+		reg = <0 0x322a8000 0 0x1000>;
+		enable-syscon = <&aon_apb_regs 0x0004 0x80>;
+		topdvfs-controller = <&topdvfs_controller>;
+		host-cluster-cells = <&lit_core_cluster>, <&big_core_cluster>;
+		slave-cluster-cells = <&scu_cluster>, <&periph_cluster>,
+		<&gic_cluster>;
+		mpll-cells = <&mpll_0>, <&mpll_1>, <&mpll_2>;
+
+		lit_core_cluster: lit-core-cluster {
+			belong-dcdc-cell = <0>;
+		};
+
+		big_core_cluster: big-core-cluster {
+			belong-dcdc-cell = <1>;
+		};
+
+		scu_cluster: scu-cluster {
+			belong-dcdc-cell = <0>;
+		};
+
+		periph_cluster: periph-cluster {
+			belong-dcdc-cell = <0>;
+		};
+
+		gic_cluster: gic-cluster {
+			belong-dcdc-cell = <0>;
+		};
+
+		mpll_0: mpll-ananke {
+			mpll-sel-syscon = <&anlg_phy_g3_regs 0x98 0xd0>;
+		};
+
+		mpll_1: mpll-prometheus {
+			mpll-sel-syscon = <&anlg_phy_g2_regs 0x44 0xd0>;
+		};
+
+		mpll_2: mpll-scu {
+			mpll-sel-syscon = <&anlg_phy_g3_regs 0xdc 0x68>;
+		};
+	};
+
+	topdvfs_controller: topdvfsctrl@322a0000 {
+		compatible = "sprd,sharkl5pro-topdvfs-dev",
+			     "sprd,topdvfs-dev",
+			     "syscon";
+		reg = <0 0x322a0000 0 0x8000>;
+		sprd,syscon-enable = <&aon_apb_regs>;
+		module-enable-cfg = <0x4 7>;
+		sprd,topdvfs-sysctrl = <&top_dvfs_apb_regs>;
+		cpu-dcdc-cells = <&dcdc_cpu0>, <&dcdc_cpu1>;
+
+		dcdc_cpu0: dcdc-cpu0 {
+			dcdc-cpu-dvfs-cfg = <&dvfs_dcdc_cpu0_cfg>;
+		};
+
+		dcdc_cpu1: dcdc-cpu1 {
+			dcdc-cpu-dvfs-cfg = <&dvfs_dcdc_cpu1_cfg>;
+		};
+	};
+};
+
+&CPU0 {
+	performance-domains = <&cpufreq 0>;
+	operating-points-v2 = <&cluster0_opp>;
+	capacity-dmips-mhz = <544>;
+	dynamic-power-coefficient = <102>;
+};
+
+&CPU1 {
+	performance-domains = <&cpufreq 0>;
+	operating-points-v2 = <&cluster0_opp>;
+	capacity-dmips-mhz = <544>;
+	dynamic-power-coefficient = <102>;
+};
+
+&CPU2 {
+	performance-domains = <&cpufreq 0>;
+	operating-points-v2 = <&cluster0_opp>;
+	capacity-dmips-mhz = <544>;
+	dynamic-power-coefficient = <102>;
+};
+
+&CPU3 {
+	performance-domains = <&cpufreq 0>;
+	operating-points-v2 = <&cluster0_opp>;
+	capacity-dmips-mhz = <544>;
+	dynamic-power-coefficient = <102>;
+};
+
+&CPU4 {
+	performance-domains = <&cpufreq 0>;
+	operating-points-v2 = <&cluster0_opp>;
+	capacity-dmips-mhz = <544>;
+	dynamic-power-coefficient = <102>;
+};
+
+&CPU5 {
+	performance-domains = <&cpufreq 0>;
+	operating-points-v2 = <&cluster0_opp>;
+	capacity-dmips-mhz = <544>;
+	dynamic-power-coefficient = <102>;
+};
+
+&CPU6 {
+	performance-domains = <&cpufreq 1>;
+	operating-points-v2 = <&cluster1_opp>;
+	capacity-dmips-mhz = <1024>;
+	dynamic-power-coefficient = <501>;
+};
+
+&CPU7 {
+	performance-domains = <&cpufreq 1>;
+	operating-points-v2 = <&cluster1_opp>;
+	capacity-dmips-mhz = <1024>;
+	dynamic-power-coefficient = <501>;
+};
