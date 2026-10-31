@@ -1,0 +1,91 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Unisoc UMS512 SoC CPUFREQ DVFS DTS file
+ *
+ * Copyright (C) 2026 Veynamer <veyr1thalone@gmail.com>
+ */
+
+&soc {
+	cpufreq: cpufreq@322a8000 {
+		compatible = "sprd,ums512-cpufreq";
+		reg = <0 0x322a8000 0 0x1000>;
+		clocks = <&aonapb_gate CLK_TOP_DVFS_EB>;
+		clock-names = "dvfs";
+		sprd,top-dvfs = <&top_dvfs_apb_regs>;
+		sprd,pmu = <&pmu_apb_regs>;
+		sprd,anlg-phy-g2 = <&anlg_phy_g2_regs>;
+		sprd,anlg-phy-g3 = <&anlg_phy_g3_regs>;
+		#performance-domain-cells = <1>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "disabled";
+
+		cluster@0 {
+			reg = <0>;
+			nvmem-cells = <&cluster0_dvfs_bin>;
+			nvmem-cell-names = "dvfs_bin";
+		};
+
+		cluster@1 {
+			reg = <1>;
+			nvmem-cells = <&cluster1_dvfs_bin>;
+			nvmem-cell-names = "dvfs_bin";
+		};
+	};
+};
+
+&CPU0 {
+	performance-domains = <&cpufreq 0>;
+	operating-points-v2 = <&cluster0_opp>;
+	capacity-dmips-mhz = <544>;
+	dynamic-power-coefficient = <102>;
+};
+
+&CPU1 {
+	performance-domains = <&cpufreq 0>;
+	operating-points-v2 = <&cluster0_opp>;
+	capacity-dmips-mhz = <544>;
+	dynamic-power-coefficient = <102>;
+};
+
+&CPU2 {
+	performance-domains = <&cpufreq 0>;
+	operating-points-v2 = <&cluster0_opp>;
+	capacity-dmips-mhz = <544>;
+	dynamic-power-coefficient = <102>;
+};
+
+&CPU3 {
+	performance-domains = <&cpufreq 0>;
+	operating-points-v2 = <&cluster0_opp>;
+	capacity-dmips-mhz = <544>;
+	dynamic-power-coefficient = <102>;
+};
+
+&CPU4 {
+	performance-domains = <&cpufreq 0>;
+	operating-points-v2 = <&cluster0_opp>;
+	capacity-dmips-mhz = <544>;
+	dynamic-power-coefficient = <102>;
+};
+
+&CPU5 {
+	performance-domains = <&cpufreq 0>;
+	operating-points-v2 = <&cluster0_opp>;
+	capacity-dmips-mhz = <544>;
+	dynamic-power-coefficient = <102>;
+};
+
+&CPU6 {
+	performance-domains = <&cpufreq 1>;
+	operating-points-v2 = <&cluster1_opp>;
+	capacity-dmips-mhz = <1024>;
+	dynamic-power-coefficient = <501>;
+};
+
+&CPU7 {
+	performance-domains = <&cpufreq 1>;
+	operating-points-v2 = <&cluster1_opp>;
+	capacity-dmips-mhz = <1024>;
+	dynamic-power-coefficient = <501>;
+};

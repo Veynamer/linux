@@ -1,0 +1,204 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Unisoc UMS512 platform T610 SOC DVFS DTS file
+ *
+ * Copyright (C) 2026 Veynamer <veyr1thalone@gmail.com>
+ * Copyright (C) 2019, Unisoc Communications Inc.
+ */
+
+/*
+ * Keep voltage grades fixed at the higher of the BSP cold/65 C values.
+ * Thermal cooling caps the highest OPP from 65 C, including the OD bin.
+ */
+/ {
+	cluster0_opp: opp-table-0 {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp-614400000 {
+			opp-hz = /bits/ 64 <614400000>;
+			clock-latency-ns = <200000>;
+			opp-microvolt = <753125>;
+			opp-microvolt-ff = <750000>;
+			opp-microvolt-tt = <756250>;
+			opp-microvolt-ss = <750000>;
+			opp-microvolt-od = <756250>;
+		};
+
+		opp-768000000 {
+			opp-hz = /bits/ 64 <768000000>;
+			clock-latency-ns = <200000>;
+			opp-microvolt = <753125>;
+			opp-microvolt-ff = <750000>;
+			opp-microvolt-tt = <756250>;
+			opp-microvolt-ss = <750000>;
+			opp-microvolt-od = <756250>;
+		};
+
+		opp-962000000 {
+			opp-hz = /bits/ 64 <962000000>;
+			clock-latency-ns = <200000>;
+			opp-microvolt = <753125>;
+			opp-microvolt-ff = <750000>;
+			opp-microvolt-tt = <756250>;
+			opp-microvolt-ss = <750000>;
+			opp-microvolt-od = <756250>;
+		};
+
+		opp-1144000000 {
+			opp-hz = /bits/ 64 <1144000000>;
+			clock-latency-ns = <200000>;
+			opp-microvolt = <815625>;
+			opp-microvolt-ff = <750000>;
+			opp-microvolt-tt = <756250>;
+			opp-microvolt-ss = <771875>;
+			opp-microvolt-od = <821875>;
+		};
+
+		opp-1228800000 {
+			opp-hz = /bits/ 64 <1228800000>;
+			clock-latency-ns = <200000>;
+			opp-microvolt = <846875>;
+			opp-microvolt-ff = <750000>;
+			opp-microvolt-tt = <759375>;
+			opp-microvolt-ss = <803125>;
+			opp-microvolt-od = <853125>;
+		};
+
+		opp-1482000000 {
+			opp-hz = /bits/ 64 <1482000000>;
+			clock-latency-ns = <200000>;
+			opp-microvolt = <934375>;
+			opp-microvolt-ff = <812500>;
+			opp-microvolt-tt = <856250>;
+			opp-microvolt-ss = <896875>;
+			opp-microvolt-od = <946875>;
+		};
+
+		opp-1536000000 {
+			opp-hz = /bits/ 64 <1536000000>;
+			clock-latency-ns = <200000>;
+			opp-microvolt = <953125>;
+			opp-microvolt-ff = <834375>;
+			opp-microvolt-tt = <875000>;
+			opp-microvolt-ss = <915625>;
+			opp-microvolt-od = <965625>;
+		};
+
+		opp-1716000000 {
+			opp-hz = /bits/ 64 <1716000000>;
+			clock-latency-ns = <200000>;
+			opp-microvolt = <1015625>;
+			opp-microvolt-ff = <903125>;
+			opp-microvolt-tt = <943750>;
+			opp-microvolt-ss = <984375>;
+			opp-microvolt-od = <1034375>;
+		};
+
+		opp-1820000000 {
+			opp-hz = /bits/ 64 <1820000000>;
+			clock-latency-ns = <200000>;
+			opp-microvolt = <1050000>;
+			opp-microvolt-ff = <940625>;
+			opp-microvolt-tt = <981250>;
+			opp-microvolt-ss = <1021875>;
+			opp-microvolt-od = <1050000>;
+		};
+	};
+
+	cluster1_opp: opp-table-1 {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp-1228800000 {
+			opp-hz = /bits/ 64 <1228800000>;
+			clock-latency-ns = <200000>;
+			opp-microvolt = <820000>;
+			opp-microvolt-ff = <750000>;
+			opp-microvolt-tt = <750000>;
+			opp-microvolt-ss = <770000>;
+			opp-microvolt-od = <830000>;
+		};
+
+		opp-1482000000 {
+			opp-hz = /bits/ 64 <1482000000>;
+			clock-latency-ns = <200000>;
+			opp-microvolt = <920000>;
+			opp-microvolt-ff = <800000>;
+			opp-microvolt-tt = <840000>;
+			opp-microvolt-ss = <880000>;
+			opp-microvolt-od = <930000>;
+		};
+
+		opp-1536000000 {
+			opp-hz = /bits/ 64 <1536000000>;
+			clock-latency-ns = <200000>;
+			opp-microvolt = <940000>;
+			opp-microvolt-ff = <820000>;
+			opp-microvolt-tt = <860000>;
+			opp-microvolt-ss = <900000>;
+			opp-microvolt-od = <960000>;
+		};
+
+		opp-1742000000 {
+			opp-hz = /bits/ 64 <1742000000>;
+			clock-latency-ns = <200000>;
+			opp-microvolt = <1020000>;
+			opp-microvolt-ff = <910000>;
+			opp-microvolt-tt = <950000>;
+			opp-microvolt-ss = <990000>;
+			opp-microvolt-od = <1040000>;
+		};
+
+		opp-1820000000 {
+			opp-hz = /bits/ 64 <1820000000>;
+			clock-latency-ns = <200000>;
+			opp-microvolt = <1050000>;
+			opp-microvolt-ff = <940000>;
+			opp-microvolt-tt = <980000>;
+			opp-microvolt-ss = <1020000>;
+			opp-microvolt-od = <1050000>;
+		};
+	};
+};
+
+/* Start CPU cooling before the BSP switches to its 65 C table. */
+&cputop0_alert0 {
+	temperature = <65000>;
+};
+
+&cpu0_alert0 {
+	temperature = <65000>;
+};
+
+&cpu1_alert0 {
+	temperature = <65000>;
+};
+
+&cpu2_alert0 {
+	temperature = <65000>;
+};
+
+&cpu7_alert0 {
+	temperature = <65000>;
+};
+
+&cputop1_alert0 {
+	temperature = <65000>;
+};
+
+&cpu3_alert0 {
+	temperature = <65000>;
+};
+
+&cpu4_alert0 {
+	temperature = <65000>;
+};
+
+&cpu5_alert0 {
+	temperature = <65000>;
+};
+
+&cpu6_alert0 {
+	temperature = <65000>;
+};
