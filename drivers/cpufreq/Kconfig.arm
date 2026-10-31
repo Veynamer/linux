@@ -219,6 +219,18 @@ config ARM_SPRD_CPUFREQ_V2
 	help
 	  This adds the CPUFreq driver support for Spreadtrum/Unisoc SoCs.
 
+config ARM_SPRD_HW_CPUFREQ_NORMAL
+	bool "Spreadtrum/Unisoc register-level hardware CPUFreq support"
+	depends on ARCH_SPRD || COMPILE_TEST
+	select PM_OPP
+	help
+	  This enables the register-level hardware DVFS driver for the
+	  sharkl5pro family (UMS512/T610/T618). Frequency and voltage
+	  pairs are taken from the OPP v2 table referenced by each CPU,
+	  while performance domains describe the CPU clusters.
+
+	  If in doubt, say N.
+
 config ARM_STI_CPUFREQ
 	tristate "STi CPUFreq support"
 	depends on CPUFREQ_DT
