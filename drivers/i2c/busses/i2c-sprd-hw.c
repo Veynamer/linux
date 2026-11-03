@@ -60,6 +60,21 @@
 #define HW_CTL_VALUE		0x30
 #define PRIL_HIGH_APB		0x64
 
+/*
+ * Hardware request channels used by the TOP_DVFS DCDC_CPU1 voltage engine.
+ * Stock u-boot programs these in its Android postload path
+ * (i2c_dvfs_hwchn_init); our boot path does not, so CHNL_EN0 stays 0 and
+ * every voltage request parks unserviced. Each channel's command config is
+ * (slave_addr << 8 | reg_addr) << 2 for the FAN53555 at 0x60.
+ */
+#define CHNLX_ADDR(x)		(0x068 + (((x) - 2) << 2))
+#define DVFS_CHNL_ADDR(da, ra)	((((da) << 8) | (ra)) << 2)
+#define DVFS_FAN53555_ADDR	0x60
+#define DVFS_TX_5_CHNL		5
+#define DVFS_TX_5_REG		0x02
+#define DVFS_TX_7_CHNL		7
+#define DVFS_TX_7_REG		0x00
+
 /* ARM_CMD_WR */
 #define REG_ADDR_OFFSET		2
 #define SLAVE_ADDR_OFFSET	10
@@ -197,6 +212,20 @@ static int sprd_i2c_hw_writebyte(struct sprd_i2c_hw *i2c_dev, u8 *buf, u32 len)
 static void sprd_i2c_hw_chnl_priority(struct sprd_i2c_hw *i2c_dev)
 {
 	writel(PRIL_HIGH_APB, i2c_dev->base + HW_CHNL_PRIL);
+}
+
+static void sprd_i2c_hw_dvfs_chnl_init(struct sprd_i2c_hw *i2c_dev)
+{
+	u32 val;
+
+	writel(DVFS_CHNL_ADDR(DVFS_FAN53555_ADDR, DVFS_TX_5_REG),
+	       i2c_dev->base + CHNLX_ADDR(DVFS_TX_5_CHNL));
+	writel(DVFS_CHNL_ADDR(DVFS_FAN53555_ADDR, DVFS_TX_7_REG),
+	       i2c_dev->base + CHNLX_ADDR(DVFS_TX_7_CHNL));
+
+	val = readl(i2c_dev->base + CHNL_EN0);
+	val |= BIT(DVFS_TX_5_CHNL) | BIT(DVFS_TX_7_CHNL);
+	writel(val, i2c_dev->base + CHNL_EN0);
 }
 
 static void sprd_i2c_hw_clear_ack(struct sprd_i2c_hw *i2c_dev)
@@ -460,6 +489,7 @@ static int sprd_i2c_hw_probe(struct platform_device *pdev)
 
 	sprd_i2c_hw_enable(i2c_dev);
 	sprd_i2c_hw_chnl_priority(i2c_dev);
+	sprd_i2c_hw_dvfs_chnl_init(i2c_dev);
 
 	ret = i2c_add_numbered_adapter(&i2c_dev->adap);
 	if (ret < 0) {
