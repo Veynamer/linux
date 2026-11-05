@@ -2,6 +2,16 @@
 
 menu "Spreadtrum and Unisoc SoC drivers"
 
+config SPRD_SOCINFO
+	tristate "Unisoc SoC information driver"
+	depends on ARCH_SPRD || COMPILE_TEST
+	depends on SOC_BUS
+	select REGMAP
+	help
+	  Say y here to expose Unisoc SoC identification information through
+	  the SoC bus. The driver reads the chip, platform, implementation,
+	  manufacturer and version IDs from the AON APB registers.
+
 config SPRD_AGDSP
 	tristate "Audio DSP support"
 	depends on ARCH_SPRD || COMPILE_TEST
