@@ -1968,6 +1968,11 @@
 		};
 	};
 
+	socinfo: socinfo {
+		compatible = "sprd,ums512-socinfo";
+		sprd,syscon-aon-apb = <&aon_apb_regs>;
+	};
+
 	wcn: sprd-marlin3 {
 		compatible = "unisoc,marlin3lite_sdio";
 		status = "disabled";
