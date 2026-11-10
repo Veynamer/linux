@@ -9,7 +9,6 @@
 #include <dt-bindings/usb/pd.h>
 #include "ums512.dtsi"
 #include "ums512-cpufreq.dtsi"
-#include "ums512-t610dvfs.dtsi"
 #include "sc2730.dtsi"
 
 / {
@@ -482,22 +481,7 @@
 	dcxo18-supply = <&vddsim2>;
 };
 
-/*
- * SDA3/SCL3 carry the TOP-DVFS engine's autonomous I2C channel to the
- * FAN53555 (DCDC_CPU1). Stock keeps these pads at func1, the I2C function.
- */
-&pinctrl {
-	dvfs_i2c_pin_func: dvfs-i2c-pin-func {
-		pins = "UMS512_SDA3", "UMS512_SCL3";
-		function = "func1";
-	};
-};
-
-&cpudvfs_dev {
-	pinctrl-names = "default";
-	pinctrl-0 = <&dvfs_i2c_pin_func>;
-};
-
 &cpufreq {
 	status = "okay";
+	sprd,soc-version = /bits/ 64 <0x30313654>; /* T610 */
 };
