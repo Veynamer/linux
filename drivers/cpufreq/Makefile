@@ -80,6 +80,7 @@ obj-$(CONFIG_ARM_SA1110_CPUFREQ)	+= sa1110-cpufreq.o
 obj-$(CONFIG_ARM_SCMI_CPUFREQ)		+= scmi-cpufreq.o
 obj-$(CONFIG_ARM_SCPI_CPUFREQ)		+= scpi-cpufreq.o
 obj-$(CONFIG_ARM_SPEAR_CPUFREQ)		+= spear-cpufreq.o
+obj-$(CONFIG_ARM_SPRD_CPUFREQ_V1)	+= sprd-cpufreq-v1.o
 obj-$(CONFIG_ARM_SPRD_CPUFREQ_V2)	+= sprd-cpufreq-v2.o
 sprd-hwdvfs-y				:= sprd-hwdvfs-normal.o sprd-hwdvfs-ums512.o sprd-hwdvfs-cpufreq.o
 obj-$(CONFIG_ARM_SPRD_HW_CPUFREQ_NORMAL)	+= sprd-hwdvfs.o
