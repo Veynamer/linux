@@ -219,6 +219,13 @@ config ARM_SPRD_CPUFREQ_V2
 	help
 	  This adds the CPUFreq driver support for Spreadtrum/Unisoc SoCs.
 
+config ARM_SPRD_CPUFREQ_V1
+	bool "Spreadtrum/Unisoc CPUFreq v1 support"
+	depends on ARCH_SPRD || COMPILE_TEST
+	default y
+	help
+	  This adds the CPUFreq driver support for Spreadtrum/Unisoc SoCs.
+
 config ARM_SPRD_HW_CPUFREQ_NORMAL
 	bool "Spreadtrum/Unisoc register-level hardware CPUFreq support"
 	depends on ARCH_SPRD || COMPILE_TEST
