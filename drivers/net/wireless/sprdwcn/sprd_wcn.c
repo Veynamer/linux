@@ -55,11 +55,6 @@ static int wcn_suspend(struct device *dev)
 
 static SIMPLE_DEV_PM_OPS(wcn_pm_ops, wcn_suspend, wcn_resume);
 
-static const struct wcn_match_data g_integ_wcn_data = {
-	.unisoc_wcn_integrated = true,
-	.unisoc_wcn_sipc = true,
-};
-
 static const struct wcn_match_data g_marlin3lite_sdio_data = {
 	.unisoc_wcn_sdio = true,
 	.unisoc_wcn_slp = true,
@@ -72,40 +67,11 @@ static const struct wcn_match_data g_marlin3_sdio_data = {
 	.unisoc_wcn_m3 = true,
 };
 
-static const struct wcn_match_data g_marlin3_pcie_data = {
-	.unisoc_wcn_pcie = true,
-	.unisoc_wcn_m3 = true,
-};
-
-#if 0
-static const struct wcn_match_data g_marlin3e_sdio_data = {
-	.unisoc_wcn_sdio = true,
-	.unisoc_wcn_slp = true,
-	.unisoc_wcn_m3e = true,
-};
-
-static const struct wcn_match_data g_marlin3e_pcie_data = {
-	.unisoc_wcn_pcie = true,
-	.unisoc_wcn_m3e = true,
-};
-
-#endif
-
 static const struct of_device_id wcn_global_match_table[] = {
-	{ .compatible = "unisoc,integrate_marlin", .data = &g_integ_wcn_data},
-
 	{ .compatible = "unisoc,marlin3lite_sdio", .data = &g_marlin3lite_sdio_data},
 
 	{ .compatible = "unisoc,marlin3_sdio", .data = &g_marlin3_sdio_data},
 
-	{ .compatible = "unisoc,marlin3_pcie", .data = &g_marlin3_pcie_data},
-
-#if 0
-	{ .compatible = "unisoc,marlin3E_sdio", .data = &g_marlin3e_sdio_data},
-
-	{ .compatible = "unisoc,marlin3E_pcie", .data = &g_marlin3e_pcie_data},
-
-#endif
 	{ },
 };
 MODULE_DEVICE_TABLE(of, wcn_global_match_table);
@@ -123,25 +89,13 @@ struct wcn_match_data *get_wcn_match_config(void)
 
 void module_bus_init(void)
 {
-	struct wcn_match_data *g_match_config = get_wcn_match_config();
-
-	/* Trimmed build: only the SDIO transport is compiled in. */
-	if (g_match_config && g_match_config->unisoc_wcn_sdio)
-		module_bus_sdio_init();
-	else
-		dump_stack();
+	module_bus_sdio_init();
 }
 EXPORT_SYMBOL(module_bus_init);
 
 void module_bus_deinit(void)
 {
-	struct wcn_match_data *g_match_config = get_wcn_match_config();
-
-	/* Trimmed build: only the SDIO transport is compiled in. */
-	if (g_match_config && g_match_config->unisoc_wcn_sdio)
-		module_bus_sdio_deinit();
-	else
-		dump_stack();
+	module_bus_sdio_deinit();
 }
 EXPORT_SYMBOL(module_bus_deinit);
 
@@ -184,11 +138,6 @@ static int sprd_wcn_probe(struct platform_device *pdev)
 	}
 
 	g_match_data = p_match_data;
-	/* Trimmed build: integrated-chip path removed; external SDIO only. */
-	if (p_match_data->unisoc_wcn_integrated) {
-		pr_err("%s: integrated WCN not supported in this build\n", __func__);
-		return -ENODEV;
-	}
 	pr_info("wcn out probe \n");
 	return marlin_probe(pdev);
 }
@@ -211,8 +160,6 @@ static void sprd_wcn_remove(struct platform_device *pdev)
 		return;
 	}
 
-	if (p_match_data->unisoc_wcn_integrated)
-		return;
 	marlin_remove(pdev);
 }
 
@@ -234,8 +181,6 @@ static void sprd_wcn_shutdown(struct platform_device *pdev)
 		return;
 	}
 
-	if (p_match_data->unisoc_wcn_integrated)
-		return;
 	marlin_shutdown(pdev);
 }
 
@@ -253,9 +198,6 @@ static struct platform_driver sprd_wcn_driver = {
 static int __init sprd_wcn_init(void)
 {
 	pr_info("%s entry!\n", __func__);
-#ifdef BUILD_WCN_PCIE
-	sprd_pcie_init();
-#endif
 	return platform_driver_register(&sprd_wcn_driver);
 }
 

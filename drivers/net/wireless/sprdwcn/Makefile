@@ -7,7 +7,6 @@
 wcn_srcdir := $(srctree)/drivers/net/wireless/sprdwcn
 wcn_incdirs := \
 	-I $(wcn_srcdir)/include \
-	-I $(wcn_srcdir)/boot \
 	-I $(wcn_srcdir)/platform \
 	-I $(wcn_srcdir)/platform/rf \
 	-I $(wcn_srcdir)/sleep
@@ -34,8 +33,6 @@ wcn_bsp-y += platform/loopcheck.o
 wcn_bsp-y += platform/wcn_boot.o
 wcn_bsp-y += platform/mem_pd_mgr.o
 wcn_bsp-y += platform/wcn_procfs.o
-# Stubs for the remaining integrated-only symbols.
-wcn_bsp-y += platform/wcn_stubs.o
 
 # sleep / power
 wcn_bsp-y += sleep/sdio_int.o

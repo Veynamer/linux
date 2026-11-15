@@ -99,9 +99,7 @@ static ssize_t wcnlog_read(struct file *filp,
 	unsigned int mdbg_rx_ring_size;
 	struct wcn_match_data *g_match_config = get_wcn_match_config();
 
-	if (g_match_config && g_match_config->unisoc_wcn_m3e)
-		mdbg_rx_ring_size = M3E_MDBG_RX_RING_SIZE;
-	else if (g_match_config && g_match_config->unisoc_wcn_m3)
+	if (g_match_config && g_match_config->unisoc_wcn_m3)
 		mdbg_rx_ring_size = M3_MDBG_RX_RING_SIZE;
 	else if (g_match_config && g_match_config->unisoc_wcn_m3lite)
 		mdbg_rx_ring_size = M3L_MDBG_RX_RING_SIZE;
@@ -123,15 +121,6 @@ static ssize_t wcnlog_read(struct file *filp,
 		MAJOR(dev->cdev.dev), MINOR(dev->cdev.dev));
 	/* count :100K-log, 32K-mem ;cat :4096 */
 	WCN_DEBUG("%s len = %ld\n", __func__, (long)count);
-#if 0
-	if (g_match_config && g_match_config->unisoc_wcn_integrated) {
-		if ((integ_functionmask[7] & CP2_FLAG_YLOG) == 1)
-			return -EIO;
-	} else {
-		if ((functionmask[7] & CP2_FLAG_YLOG) == 1)
-			return -EIO;
-	}
-#endif
 	if (MINOR(dev->cdev.dev) == 1) {
 		WCN_INFO("unsupported to read slog_wcn1: BT audio data\n");
 		return -EPERM;

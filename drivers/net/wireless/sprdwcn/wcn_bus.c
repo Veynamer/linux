@@ -38,7 +38,6 @@ struct chn_info_t {
 
 static struct sprdwcn_bus_ops *wcn_bus_ops;
 
-static struct chn_info_t g_sipc_chn_info[SIPC_CHN_MAX_NUM];
 static struct chn_info_t g_chn_info[CHN_MAX_NUM];
 
 static bool mdbg_white_list_str_check(char *buf, ssize_t len)
@@ -62,7 +61,6 @@ bool wcn_push_list_condition_check(
 		struct mbuf_t *head, struct mbuf_t *tail, int num)
 {
 	size_t rsvlen = 0;
-	struct wcn_match_data *g_match_config = get_wcn_match_config();
 
 	if (sprdwcn_bus_get_carddump_status() || wcn_is_assert()) {
 		if (num != 1) {
@@ -71,12 +69,7 @@ bool wcn_push_list_condition_check(
 			return false;
 		}
 
-		if (g_match_config && g_match_config->unisoc_wcn_sipc)
-			rsvlen = 0;
-		else if (g_match_config && g_match_config->unisoc_wcn_sdio)
-			rsvlen = SDIOHAL_PUB_HEAD_RSV;
-		else
-			rsvlen = PUB_HEAD_RSV;
+		rsvlen = SDIOHAL_PUB_HEAD_RSV;
 
 		return mdbg_white_list_str_check(head->buf + rsvlen, head->len);
 	}
@@ -96,12 +89,7 @@ EXPORT_SYMBOL_GPL(sprd_wlan_power_status_sync);
 
 static struct chn_info_t *chn_info(void)
 {
-	struct wcn_match_data *g_match_config = get_wcn_match_config();
-
-	if (g_match_config && g_match_config->unisoc_wcn_sipc)
-		return g_sipc_chn_info;
-	else
-		return g_chn_info;
+	return g_chn_info;
 }
 
 static int buf_list_check(struct buffer_pool_t *pool, struct mbuf_t *head,
@@ -357,15 +345,6 @@ int bus_chn_deinit(struct mchn_ops_t *ops)
 
 struct mchn_ops_t *chn_ops(int channel)
 {
-	struct wcn_match_data *g_match_config = get_wcn_match_config();
-
-	if (g_match_config && g_match_config->unisoc_wcn_sipc) {
-		if (channel >= SIPC_CHN_MAX_NUM || channel < 0)
-			return NULL;
-
-		return g_sipc_chn_info[channel].ops;
-	}
-
 	if (channel >= CHN_MAX_NUM || channel < 0)
 		return NULL;
 

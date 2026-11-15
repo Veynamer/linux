@@ -1,5 +1,5 @@
-#ifndef __MARLIN2_RF_H__
-#define __MARLIN2_RF_H__
+#ifndef __WCN_RF_H__
+#define __WCN_RF_H__
 
 #define DCOC_CALI_CODE_LEN 18
 #define TXPOWER_LEN 14

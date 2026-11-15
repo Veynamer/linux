@@ -61,7 +61,6 @@ void slp_mgr_drv_sleep(enum slp_subsys subsys, bool enable)
 int slp_mgr_wakeup(enum slp_subsys subsys)
 {
 	unsigned char slp_sts = 0;
-	unsigned char cnt = 0;
 	int ret;
 	int do_dump = 0;
 	ktime_t time_end;
@@ -84,14 +83,6 @@ int slp_mgr_wakeup(enum slp_subsys subsys)
 				goto try_timeout;
 			}
 			slp_sts &= 0xF0;
-			if (g_match_config && g_match_config->unisoc_wcn_m3lite && is_ums9620) {
-				if ((slp_sts != BTWF_WAKEUP_LOCK) && (cnt == 0)) {
-					marlin_avdd18_dcxo_enable(true);
-					WCN_INFO("cnt-%d, subsys-%d\n",
-						cnt, subsys);
-					cnt++;
-				}
-			}
 			if (g_match_config && g_match_config->unisoc_wcn_m3lite) {
 				if ((slp_sts != BTWF_IN_DEEPSLEEP) &&
 				   (slp_sts != M3L_BTWF_PLL_PWR_WAIT) &&

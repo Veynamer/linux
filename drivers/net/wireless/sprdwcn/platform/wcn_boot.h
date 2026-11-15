@@ -12,8 +12,6 @@
 #endif
 
 #define pr_fmt(fmt) "WCN BOOT: " fmt
-extern unsigned char is_ums9620;
-
 struct wcn_sync_info_t {
 	unsigned int init_status;
 	unsigned int mem_pd_bt_start_addr;

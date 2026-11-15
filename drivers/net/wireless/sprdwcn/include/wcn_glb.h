@@ -16,12 +16,8 @@
 #include "wcn_misc.h"
 #include "sprd_wcn.h"
 #include "wcn_glb_reg.h"
-#include "wcn_integrate.h"
-#include "wcn_integrate_boot.h"
-#include "wcn_integrate_dev.h"
 
 /* log buf size */
-#define M3E_MDBG_RX_RING_SIZE		(64*1024)
 #define M3L_MDBG_RX_RING_SIZE		(96 * 1024)
 #define M3_MDBG_RX_RING_SIZE		(96 * 1024)
 #define MDBG_RX_RING_SIZE	(128 * 1024)

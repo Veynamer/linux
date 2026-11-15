@@ -2,7 +2,7 @@
  * Copyright (C) 2016 Spreadtrum Communications Inc.
  *
  * Filename : marlin.h
- * Abstract : This file is a implementation for driver of marlin2
+ * Abstract : WCN platform driver interface
  *
  * Authors	: yufeng.yang
  *

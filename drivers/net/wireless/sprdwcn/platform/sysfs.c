@@ -11,12 +11,11 @@
 #include <linux/slab.h>
 #include <misc/wcn_bus.h>
 
-#include "pcie.h"
 #include "../sdio/sdiohal.h"
 #include "wcn_dbg.h"
 #include "wcn_glb.h"
 
-extern int is_wcn_shutdown;
+static int is_wcn_shutdown;
 
 bool isInAtCmd;
 struct wcn_sysfs_info sysfs_info;
@@ -49,31 +48,12 @@ int wcn_send_atcmd(void *cmd, size_t cmd_len,
 	int ret;
 	unsigned long timeleft;
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
-	struct wcn_match_data *g_match_config = get_wcn_match_config();
-	unsigned int pub_head_rsv;
-	/* dma_buf for dma */
-	static struct dma_buf dma_buf;
-	static int at_buf_flag;
-	struct wcn_pcie_info *pcie_dev;
-	/* common buf for kmalloc */
+	unsigned int pub_head_rsv = SDIOHAL_PUB_HEAD_RSV;
 	unsigned char *com_buf = NULL;
 
-	if (g_match_config && g_match_config->unisoc_wcn_pcie) {
-		pcie_dev = get_wcn_device_info();
-		if (!pcie_dev) {
-			WCN_ERR("%s:PCIE device link error\n", __func__);
-			return -1;
-		}
-	}
-
-	if (g_match_config && g_match_config->unisoc_wcn_sdio) {
-		pub_head_rsv = SDIOHAL_PUB_HEAD_RSV;
-		if (!WCN_CARD_EXIST(&p_data->xmit_cnt)) {
-			WCN_INFO("%s:already power off\n", __func__);
-			return 0;
-		}
-	} else {
-		pub_head_rsv = PUB_HEAD_RSV;
+	if (!WCN_CARD_EXIST(&p_data->xmit_cnt)) {
+		WCN_INFO("%s:already power off\n", __func__);
+		return 0;
 	}
 
 	wcn_send_atcmd_lock();
@@ -84,32 +64,15 @@ int wcn_send_atcmd(void *cmd, size_t cmd_len,
 		return -1;
 	}
 
-	if (g_match_config && g_match_config->unisoc_wcn_pcie) {
-		if (at_buf_flag == 0) {
-			ret = dmalloc(pcie_dev, &dma_buf, 128);
-			if (ret != 0) {
-				wcn_send_atcmd_unlock();
-				return -1;
-			}
-			at_buf_flag = 1;
-		}
-		head->buf = (unsigned char *)(dma_buf.vir);
-		head->phy = (unsigned long)(dma_buf.phy);
-		head->len = cmd_len;
-		memset(head->buf, 0x0, head->len);
-		memcpy(head->buf, cmd, cmd_len);
-		head->next = NULL;
-	} else {
-		com_buf = kzalloc(128 + pub_head_rsv + 1, GFP_KERNEL);
-		if (!com_buf) {
-			wcn_send_atcmd_unlock();
-			return -ENOMEM;
-		}
-		memcpy(com_buf + pub_head_rsv, cmd, cmd_len);
-		head->buf = com_buf;
-		head->len = cmd_len;
-		head->next = NULL;
+	com_buf = kzalloc(128 + pub_head_rsv + 1, GFP_KERNEL);
+	if (!com_buf) {
+		wcn_send_atcmd_unlock();
+		return -ENOMEM;
 	}
+	memcpy(com_buf + pub_head_rsv, cmd, cmd_len);
+	head->buf = com_buf;
+	head->len = cmd_len;
+	head->next = NULL;
 
 	reinit_completion(&sysfs_info.cmd_completion);
 	ret = sprdwcn_bus_push_list(0, head, tail, num);
@@ -117,12 +80,10 @@ int wcn_send_atcmd(void *cmd, size_t cmd_len,
 		WCN_INFO("sprdwcn_bus_push_list error=%d\n", ret);
 	timeleft = wait_for_completion_timeout(&sysfs_info.cmd_completion,
 					       3 * HZ);
-	if (g_match_config && g_match_config->unisoc_wcn_sdio) {
-		if (!WCN_CARD_EXIST(&p_data->xmit_cnt)) {
-			WCN_INFO("%s:already power off\n", __func__);
-			wcn_send_atcmd_unlock();
-			return 0;
-		}
+	if (!WCN_CARD_EXIST(&p_data->xmit_cnt)) {
+		WCN_INFO("%s:already power off\n", __func__);
+		wcn_send_atcmd_unlock();
+		return 0;
 	}
 
 	if (!timeleft) {

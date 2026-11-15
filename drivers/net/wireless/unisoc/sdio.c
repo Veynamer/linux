@@ -495,7 +495,7 @@ static void sc23xx_sdio_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id sc23xx_sdio_of_match[] = {
-	{ .compatible = "sprd,sc2355-sdio-wifi" },
+	{ .compatible = "sprd,umw2652-wlan" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, sc23xx_sdio_of_match);

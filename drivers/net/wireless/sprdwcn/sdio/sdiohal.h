@@ -86,7 +86,6 @@
 /* tx buf size for normal dma mode */
 #define SDIOHAL_TX_SENDBUF_LEN		(MAX_CHAIN_NODE_NUM * MAX_MBUF_SIZE)
 
-/* temp for marlin2 */
 #define WIFI_MIN_RX		8
 #define WIFI_MAX_RX		9
 

@@ -80,15 +80,6 @@ enum smp_diag_subtype_t {
 #define WCNBUS_TX 1
 #define WCNBUS_RX 0
 
-enum wcn_sipcbus_channel_t {
-	WCN_SIPC_AT_TX = 0,
-	WCN_SIPC_LOOPCHECK_RX = 2,
-	WCN_SIPC_AT_RX = 1,
-	WCN_SIPC_ASSERT_RX = 3,
-	WCN_SIPC_RING_RX = 4,
-	WCN_SIPC_RSV_RX,
-};
-
 enum wcnbus_channel_t {
 	WCN_AT_TX = 0,
 	WCN_LOOPCHECK_RX = 12,

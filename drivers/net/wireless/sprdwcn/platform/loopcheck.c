@@ -9,7 +9,6 @@
 #include <linux/timekeeping.h>
 #include <misc/wcn_bus.h>
 
-#include "pcie.h"
 #include "wcn_glb.h"
 #include "wcn_misc.h"
 #include "wcn_procfs.h"
@@ -30,66 +29,6 @@ struct wcn_loopcheck {
 static struct wcn_loopcheck loopcheck;
 extern bool isInAtCmd;
 
-#ifdef BUILD_WCN_PCIE
-static int loopcheck_send_pcie(char *cmd, unsigned int len)
-{
-	struct mbuf_t *head = NULL;
-	struct mbuf_t *tail = NULL;
-	int num = 1;
-	int ret;
-	/* dma_buf for dma */
-	static struct dma_buf dma_buf;
-	static int at_buf_flag;
-	struct wcn_pcie_info *pcie_dev;
-
-	WCN_INFO("%s enter\n", __func__);
-	pcie_dev = get_wcn_device_info();
-	if (!pcie_dev) {
-		WCN_ERR("%s:PCIE device link error\n", __func__);
-		return -1;
-	}
-	if (atomic_read(&pcie_dev->is_suspending)) {
-		WCN_ERR("%s:PCIE dev is suspending\n", __func__);
-		return -1;
-	}
-	if (pcie_dev->pci_status == WCN_BUS_DOWN) {
-		WCN_ERR("%s:PCIE wcn bus down\n", __func__);
-		return -1;
-	}
-	if (isInAtCmd) {
-		WCN_ERR("%s: PCIE is In AT CMD... \n", __func__);
-		return -1;
-	}
-
-	ret = sprdwcn_bus_list_alloc(0, &head, &tail, &num);
-	if (ret || head == NULL || tail == NULL) {
-		WCN_ERR("%s:%d mbuf_link_alloc fail\n", __func__, __LINE__);
-		return -1;
-	}
-
-	if (at_buf_flag == 0) {
-		ret = dmalloc(pcie_dev, &dma_buf, 128);
-		if (ret != 0) {
-			return -1;
-		}
-		at_buf_flag = 1;
-	}
-	head->buf = (unsigned char *)(dma_buf.vir);
-	head->phy = (unsigned long)(dma_buf.phy);
-	head->len = len;
-	memset(head->buf, 0x0, dma_buf.size);
-	memcpy(head->buf, cmd, len);
-	head->next = NULL;
-	ret = sprdwcn_bus_push_list(0, head, tail, num);
-	if (ret)
-		WCN_INFO("sprdwcn_bus_push_list error=%d\n", ret);
-
-	WCN_INFO("tx:%s in %s\n", cmd, __func__);
-
-	return len;
-}
-#endif
-
 static int loopcheck_send(char *buf, unsigned int len)
 {
 	unsigned char *send_buf = NULL;
@@ -97,20 +36,7 @@ static int loopcheck_send(char *buf, unsigned int len)
 	struct mbuf_t *tail = NULL;
 	int ret = 0, num = 1;
 	struct mchn_ops_t *p_mdbg_proc_ops = get_mdbg_proc_op() + MDBG_AT_TX_OPS;
-	struct wcn_match_data *g_match_config = get_wcn_match_config();
-	unsigned int pub_head_rsv;
-
-	if (g_match_config && g_match_config->unisoc_wcn_pcie) {
-#ifdef BUILD_WCN_PCIE
-		ret = loopcheck_send_pcie(buf, len);
-#endif
-		return ret;
-	}
-
-	if (g_match_config && g_match_config->unisoc_wcn_sdio)
-		pub_head_rsv = SDIOHAL_PUB_HEAD_RSV;
-	else
-		pub_head_rsv = PUB_HEAD_RSV;
+	unsigned int pub_head_rsv = SDIOHAL_PUB_HEAD_RSV;
 
 	/* Both fire every LOOPCHECK_TIMER_INTERVAL seconds -- pr_debug, not pr_info. */
 	WCN_DBG("%s", __wcn_get_sw_ver());
@@ -130,19 +56,14 @@ static int loopcheck_send(char *buf, unsigned int len)
 		head->len = len;
 		head->next = NULL;
 
-		if (g_match_config && g_match_config->unisoc_wcn_sdio) {
-			ret = sprdwcn_bus_push_list_direct(p_mdbg_proc_ops->channel,
-							   head, tail, num);
-			if (p_mdbg_proc_ops->pop_link)
-				p_mdbg_proc_ops->pop_link(p_mdbg_proc_ops->channel,
-							  head, tail, num);
-			else
-				sprdwcn_bus_list_free(p_mdbg_proc_ops->channel,
-						      head, tail, num);
-		} else {
-			ret = sprdwcn_bus_push_list(p_mdbg_proc_ops->channel,
-						    head, tail, num);
-		}
+		ret = sprdwcn_bus_push_list_direct(p_mdbg_proc_ops->channel,
+						   head, tail, num);
+		if (p_mdbg_proc_ops->pop_link)
+			p_mdbg_proc_ops->pop_link(p_mdbg_proc_ops->channel,
+						  head, tail, num);
+		else
+			sprdwcn_bus_list_free(p_mdbg_proc_ops->channel,
+					      head, tail, num);
 
 		if (ret != 0)
 			WCN_ERR("loopcheck send fail!\n");
@@ -164,7 +85,6 @@ static void loopcheck_work_queue(struct work_struct *work)
 	struct timespec64 ts;
 	struct rtc_time tm;
 	static unsigned int loopcheck_cnt;
-	struct wcn_match_data *g_match_config = get_wcn_match_config();
 
 	loopcheck_tx_ns = local_clock();
 	marlin_boot_t = marlin_bootup_time_get();
@@ -192,8 +112,8 @@ static void loopcheck_work_queue(struct work_struct *work)
 		}
 		wcn_send_atcmd_lock();
 		ret = loopcheck_send(a, strlen(a));
-		if ((g_match_config && g_match_config->unisoc_wcn_pcie) && (ret == -1)) {
-			WCN_ERR("pcie is not ok, need to wait!\n");
+		if (ret == -1) {
+			WCN_ERR("loopcheck send failed\n");
 			wcn_send_atcmd_unlock();
 		} else {
 			timeleft = wait_for_completion_timeout(&loopcheck.completion, (4 * HZ));
