@@ -52,7 +52,7 @@ bool sdio_wait_pub_int_done(void)
 		/* enter suspend, means no tx data to cp2, so set sleep */
 		mutex_lock(&(slp_mgr->drv_slp_lock));
 		if (atomic_read(&(slp_mgr->cp2_state)) == STAY_AWAKING) {
-			WCN_INFO("allow sleep1\n");
+			WCN_DBG("allow sleep1\n");
 			slp_allow_sleep();
 			atomic_set(&(slp_mgr->cp2_state), STAY_SLPING);
 		}
@@ -60,14 +60,14 @@ bool sdio_wait_pub_int_done(void)
 
 		/* wait pub_int handle finish */
 		if (unlikely(atomic_read(&flag_pub_int_done) == 0))
-			WCN_INFO("wait pub_int_done\n");
+			WCN_DBG("wait pub_int_done\n");
 		ret = wait_event_killable_timeout(sdio_int.pub_int_done,
 			atomic_read(&flag_pub_int_done), usecs_to_jiffies(3000 * 10));
 
-		WCN_INFO("flag_pub_int_done(%s)-%d\n", ret == 0 ? "timeout" : "success",
+		WCN_DBG("flag_pub_int_done(%s)-%d\n", ret == 0 ? "timeout" : "success",
 			atomic_read(&flag_pub_int_done));
 	} else
-		WCN_INFO("sdio power_notify is NULL\n");
+		WCN_DBG("sdio power_notify is NULL\n");
 
 	return !!ret;
 }
@@ -88,16 +88,15 @@ static int pub_int_handle_thread(void *data)
 			&(pub_int_sts0.reg));
 		/* sdio cmd52 fail, it should be chip power off */
 		if (ret < 0)
-			WCN_INFO("sdio cmd52 fail, ret-%d\n", ret);
+			WCN_DBG("sdio cmd52 fail, ret-%d\n", ret);
 		else {
 			if (reg_test == pub_int_sts0.reg) {
 				reg_test_cnt++;
 			} else {
-				WCN_INFO("PUB_INT_STS0-0x%x\n", pub_int_sts0.reg);
+				WCN_DBG("PUB_INT_STS0-0x%x\n", pub_int_sts0.reg);
 				reg_test_cnt = 0;
 			}
 			reg_test = pub_int_sts0.reg;
-			WCN_DBG("PUB_INT_STS0-0x%x\n", pub_int_sts0.reg);
 			sdio_pub_int_clr0(pub_int_sts0.reg);
 
 		bit_num = 0;
@@ -155,7 +154,7 @@ static int sdio_isr_handle_init(void)
 		return 0;
 	}
 
-	WCN_INFO("%s ok!\n", __func__);
+	WCN_DBG("%s ok!\n", __func__);
 
 	return -1;
 }
@@ -164,7 +163,7 @@ static int sdio_pub_int_register(int irq)
 {
 	int ret;
 
-	WCN_INFO("public_int, gpio-%d\n", irq);
+	WCN_DBG("public_int, gpio-%d\n", irq);
 
 	ret = gpio_direction_input(irq);
 	if (ret < 0) {
@@ -211,7 +210,7 @@ int sdio_ap_int_cp0(enum AP_INT_CP_BIT bit)
 		reg_int_cp0.bit.test_delet_thread = 1;
 		break;
 	default:
-		WCN_INFO("ap_int_cp bit error\n");
+		WCN_DBG("ap_int_cp bit error\n");
 		break;
 	}
 
@@ -230,7 +229,7 @@ int sdio_pub_int_regcb(enum PUB_INT_BIT bit,
 
 	sdio_int.pub_int_cb[bit] = isr_handler;
 
-	WCN_INFO("0X%x pub_int_RegCb\n", bit);
+	WCN_DBG("0X%x pub_int_RegCb\n", bit);
 
 	return 0;
 }
@@ -250,7 +249,7 @@ int sdio_pub_int_btwf_en0(void)
 	reg_int_en.bit.bt_close = 1;
 	sprdwcn_bus_aon_writeb(sdio_int.pub_int_en0, reg_int_en.reg);
 
-	WCN_INFO("%s ok!\n", __func__);
+	WCN_DBG("%s ok!\n", __func__);
 
 	return 0;
 }
@@ -290,7 +289,7 @@ int sdio_pub_int_init(int irq)
 
 	sdio_isr_handle_init();
 
-	WCN_INFO("%s ok!\n", __func__);
+	WCN_DBG("%s ok!\n", __func__);
 
 	return 0;
 }
@@ -312,7 +311,7 @@ int sdio_pub_int_deinit(void)
 	wakeup_source_unregister(sdio_int.pub_int_wakelock);
 	kfree(sdio_int.pub_int_wakelock);
 
-	WCN_INFO("%s ok!\n", __func__);
+	WCN_DBG("%s ok!\n", __func__);
 
 	return 0;
 }

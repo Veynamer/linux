@@ -15,11 +15,13 @@
  * GNU General Public License for more details.
  */
 
+#include <linux/devcoredump.h>
 #include <linux/mutex.h>
 #include <linux/poll.h>
 #include <linux/proc_fs.h>
 #include <linux/sched.h>
 #include <linux/sched/clock.h>
+#include <linux/vmalloc.h>
 #include <linux/wait.h>
 #include <misc/marlin_platform.h>
 #include <misc/wcn_bus.h>
@@ -33,8 +35,6 @@
 #include "mdbg_type.h"
 #include "../include/wcn_dbg.h"
 #include "../sdio/sdiohal.h"
-
-u32 wcn_print_level = WCN_DEBUG_OFF;
 
 static u32 g_loopcheck_switch;
 
@@ -105,11 +105,30 @@ bool wcn_is_assert(void)
 }
 EXPORT_SYMBOL_GPL(wcn_is_assert);
 
+static void wcn_assert_coredump(const char *str)
+{
+	size_t len;
+	char *dump;
+
+	if (!wcn_dev || !str)
+		return;
+
+	len = strlen(str) + 1;
+
+	dump = vzalloc(len);
+	if (!dump)
+		return;
+
+	memcpy(dump, str, len);
+	dev_coredumpv(wcn_dev, dump, len, GFP_KERNEL);
+}
+
 static void __wcn_assert_interface(enum wcn_source_type type, char *str)
 {
 	WCN_INFO("wcn_assert_interface\n");
 	WCN_ERR("wcn_source_type:%d\n", type);
 	WCN_ERR("fw assert:%s\n", str);
+	wcn_assert_coredump(str);
 
 	if (!mutex_trylock(&mdbg_proc->mutex)) {
 		WCN_ERR("fw assert hanppend already\n");
@@ -211,7 +230,7 @@ int mdbg_loopcheck_read(int channel, struct mbuf_t *head,
 	memset(mdbg_proc->loopcheck.buf, 0, MDBG_LOOPCHECK_SIZE);
 	memcpy(mdbg_proc->loopcheck.buf, head->buf + pub_head_rsv, puh->len);
 	mdbg_proc->loopcheck.rcv_len = puh->len;
-	WCN_INFO("rx:%s\n", (char *)(mdbg_proc->loopcheck.buf));
+	WCN_DBG("rx:%s\n", (char *)(mdbg_proc->loopcheck.buf));
 	mdbg_proc->fail_count = 0;
 	complete(&mdbg_proc->loopcheck.completed);
 	complete_kernel_loopcheck();
@@ -238,7 +257,7 @@ int mdbg_at_cmd_read(int channel, struct mbuf_t *head,
 	memset(mdbg_proc->at_cmd.buf, 0, MDBG_AT_CMD_SIZE);
 	memcpy(mdbg_proc->at_cmd.buf, head->buf + pub_head_rsv, puh->len);
 	mdbg_proc->at_cmd.rcv_len = puh->len;
-	WCN_INFO("at cmd read:%s\n",
+	WCN_DBG("at cmd read:%s\n",
 		(char *)(mdbg_proc->at_cmd.buf));
 	complete(&mdbg_proc->at_cmd.completed);
 	notify_at_cmd_finish(mdbg_proc->at_cmd.buf, mdbg_proc->at_cmd.rcv_len);
@@ -298,7 +317,7 @@ static ssize_t mdbg_proc_read(struct file *filp,
 	if (strcmp(type, "loopcheck") == 0) {
 		if (unlikely(g_loopcheck_switch != 0)) {
 			if (marlin_get_module_status() == 1) {
-				WCN_INFO("fake loopcheck\n");
+				WCN_DBG("fake loopcheck\n");
 				if (copy_to_user((void __user *)buf,
 							"loopcheck_ack", 13))
 					WCN_ERR("fake loopcheck reply error\n");
@@ -308,7 +327,7 @@ static ssize_t mdbg_proc_read(struct file *filp,
 							"poweroff", 8))
 					WCN_ERR("read loopcheck error\n");
 				len = 8;
-				WCN_INFO("loopcheck poweroff\n");
+				WCN_DBG("loopcheck poweroff\n");
 			}
 			return len;
 		}
@@ -329,7 +348,7 @@ static ssize_t mdbg_proc_read(struct file *filp,
 					"loopcheck_ack", 13))
 					return -EFAULT;
 				loopcheck_ready_clear();
-				WCN_INFO("CP power on first time\n");
+				WCN_DBG("CP power on first time\n");
 				len = 13;
 			} else if (mdbg_rx_count_change()) {
 			/* fix the error(ack slow),use rx count to verify CP */
@@ -347,14 +366,14 @@ static ssize_t mdbg_proc_read(struct file *filp,
 				if (strncmp(mdbg_proc->loopcheck.buf,
 					"loopcheck_ack", 13) != 0)
 					mdbg_proc->fail_count++;
-				WCN_INFO("loopcheck status:%d\n",
+				WCN_DBG("loopcheck status:%d\n",
 					mdbg_proc->fail_count);
 			}
 		} else {
 			if (copy_to_user((void __user *)buf, "poweroff", 8))
 				return -EFAULT;
 			len = 8;
-			WCN_INFO("mdbg loopcheck poweroff\n");
+			WCN_DBG("mdbg loopcheck poweroff\n");
 		}
 		memset(mdbg_proc->loopcheck.buf, 0, MDBG_LOOPCHECK_SIZE);
 		mdbg_proc->loopcheck.rcv_len = 0;
@@ -481,7 +500,7 @@ static ssize_t mdbg_proc_write(struct file *filp,
 	if (copy_from_user(mdbg_proc->write_buf, buf, count))
 		return -EFAULT;
 
-	WCN_INFO("mdbg_proc->write_buf:%s\n", mdbg_proc->write_buf);
+	WCN_DBG("mdbg_proc->write_buf:%s\n", mdbg_proc->write_buf);
 
 	if (strncmp(mdbg_proc->write_buf, "startwcn", 8) == 0) {
 		if (start_marlin(MARLIN_MDBG)) {
@@ -551,7 +570,7 @@ static ssize_t mdbg_proc_write(struct file *filp,
 			loopcheck_tx_ns, marlin_boot_t);
 		/* Be care the count value changed here before send to CP2 */
 		count = strlen(mdbg_proc->write_buf);
-		WCN_INFO("%s, count = %d", mdbg_proc->write_buf, (int)count);
+		WCN_DBG("%s, count = %d", mdbg_proc->write_buf, (int)count);
 	}
 
 	mdbg_send(mdbg_proc->write_buf, count, MDBG_SUBTYPE_AT);

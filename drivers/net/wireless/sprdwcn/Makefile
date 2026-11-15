@@ -33,6 +33,7 @@ wcn_bsp-y += platform/loopcheck.o
 wcn_bsp-y += platform/wcn_boot.o
 wcn_bsp-y += platform/mem_pd_mgr.o
 wcn_bsp-y += platform/wcn_procfs.o
+wcn_bsp-y += platform/wcn_debugfs.o
 
 # sleep / power
 wcn_bsp-y += sleep/sdio_int.o

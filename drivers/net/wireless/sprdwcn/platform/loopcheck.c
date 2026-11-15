@@ -27,7 +27,6 @@ struct wcn_loopcheck {
 };
 
 static struct wcn_loopcheck loopcheck;
-extern bool isInAtCmd;
 
 static int loopcheck_send(char *buf, unsigned int len)
 {
@@ -105,7 +104,7 @@ static void loopcheck_work_queue(struct work_struct *work)
 
 	if (sprdwcn_rx_cnt_a == sprdwcn_rx_cnt_b) {
 		if (sprdwcn_bus_is_suspended(false)) {
-			WCN_INFO("BUS suspended, pause loopcheck\n");
+			WCN_DBG("BUS suspended, pause loopcheck\n");
 			ret = queue_delayed_work(loopcheck.workqueue, &loopcheck.work,
 				 msecs_to_jiffies(1500));
 			return;
@@ -124,7 +123,7 @@ static void loopcheck_work_queue(struct work_struct *work)
 				ktime_get_real_ts64(&ts);
 				ts.tv_sec -= sys_tz.tz_minuteswest * 60;
 				rtc_time64_to_tm(ts.tv_sec, &tm);
-				WCN_INFO("loopcheck(%u) %04d-%02d-%02d_%02d:%02d:%02d.%ld", loopcheck_cnt,
+				WCN_DBG("loopcheck(%u) %04d-%02d-%02d_%02d:%02d:%02d.%ld", loopcheck_cnt,
 					tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour,
 					tm.tm_min, tm.tm_sec, ts.tv_nsec);
 			}
@@ -146,7 +145,7 @@ void start_loopcheck(void)
 	if (!test_bit(WCN_LOOPCHECK_INIT, &loopcheck.status) ||
 	    test_and_set_bit(WCN_LOOPCHECK_OPEN, &loopcheck.status))
 		return;
-	WCN_INFO("%s\n", __func__);
+	WCN_DBG("%s\n", __func__);
 	reinit_completion(&loopcheck.completion);
 	queue_delayed_work(loopcheck.workqueue, &loopcheck.work,
 				LOOPCHECK_START_WAIT * HZ);
@@ -158,7 +157,7 @@ void stop_loopcheck(void)
 	    !test_and_clear_bit(WCN_LOOPCHECK_OPEN, &loopcheck.status) ||
 	    test_bit(WCN_LOOPCHECK_FAIL, &loopcheck.status))
 		return;
-	WCN_INFO("%s\n", __func__);
+	WCN_DBG("%s\n", __func__);
 	complete_all(&loopcheck.completion);
 	cancel_delayed_work_sync(&loopcheck.work);
 }

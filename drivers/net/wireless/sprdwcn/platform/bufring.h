@@ -34,6 +34,16 @@ struct mdbg_ring_t {
 	/* is_mem=1:mem, 0:log */
 	bool is_mem;
 	struct mutex *plock;
+	u64 total_written;
+	u64 total_read;
+	u64 total_dropped;
+};
+
+struct mdbg_ring_stats {
+	u64 written;
+	u64 read;
+	u64 dropped;
+	long int used;
 };
 
 struct mdbg_ring_t *mdbg_ring_alloc(unsigned long int size);

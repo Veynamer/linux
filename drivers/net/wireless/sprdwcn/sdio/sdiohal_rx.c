@@ -81,7 +81,7 @@ static int sdiohal_rx_list_parser(struct sdiohal_list_t *data_list,
 	struct mbuf_t *mbuf_node, *mbuf_next;
 	unsigned int node_num, i;
 	int inout = 0, channel;
-	unsigned int parse_len;
+	unsigned int parse_len __maybe_unused;
 
 	sdiohal_list_check(data_list, __func__, SDIOHAL_READ);
 
@@ -134,7 +134,7 @@ static int sdiohal_rx_buf_parser(char *data_buf, int valid_len)
 	struct sdiohal_list_t *data_list;
 	int inout = 0, channel;
 	unsigned char *p;
-	unsigned int parse_len;
+	unsigned int parse_len __maybe_unused;
 
 	puh = (struct bus_puh_t *)data_buf;
 	for (parse_len = 0; parse_len < valid_len;) {
@@ -205,7 +205,7 @@ int sdiohal_rx_thread(void *data)
 	static char *rx_buf;
 	struct sdiohal_list_t *data_list;
 	struct timespec64 tm_begin, tm_end;
-	static long time_total_ns;
+	static long time_total_ns __maybe_unused;
 	static int times_count;
 
 	set_user_nice(current, -20);

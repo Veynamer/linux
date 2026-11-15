@@ -58,7 +58,7 @@ int sdiohal_tx_thread(void *data)
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
 	struct sdiohal_list_t data_list;
 	struct timespec64 tm_begin, tm_end;
-	static long time_total_ns;
+	static long time_total_ns __maybe_unused;
 	static int times_count;
 	int ret;
 

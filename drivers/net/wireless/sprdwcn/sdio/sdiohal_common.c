@@ -18,29 +18,29 @@ void sdiohal_debug_point_show(void)
 	struct sdiohal_xmit_debug_point *rxp = p_data->sdcb.rx_list_dispatch;
 	int i = 0;
 
-	pr_info("rx_irq_ns(%llu %llu), tx_sch_ns(%llu %llu).\n",
+	pr_debug("rx_irq_ns(%llu %llu), tx_sch_ns(%llu %llu).\n",
 		p_data->tm_begin_irq, p_data->tm_end_irq, p_data->tm_begin_sch, p_data->tm_end_sch);
 
-	pr_info("Last xmit_lock: Enter task(%s) caller: %ps, time=%llu\n",
+	pr_debug("Last xmit_lock: Enter task(%s) caller: %ps, time=%llu\n",
 		p_data->sdcb.op_enter_comm, p_data->sdcb.op_enter_builtin_addr[0],
 		p_data->op_enter_ns);
-	pr_info("Last xmit_lock: Leave task(%s) caller: %ps, time=%llu\n",
+	pr_debug("Last xmit_lock: Leave task(%s) caller: %ps, time=%llu\n",
 		p_data->sdcb.op_leave_comm, p_data->sdcb.op_leave_builtin_addr[0],
 		p_data->op_leave_ns);
 
 	if (p_data->op_enter_ns > p_data->op_leave_ns)
-		pr_info("WARNING:Task(%s) holds xmit_lock!!!", p_data->sdcb.op_enter_comm);
+		pr_debug("WARNING:Task(%s) holds xmit_lock!!!", p_data->sdcb.op_enter_comm);
 
-	pr_info("SDIOHAL TX DEBUG POINT[%d]:\n", p_data->sdcb.tx_list_push_index - 1);
+	pr_debug("SDIOHAL TX DEBUG POINT[%d]:\n", p_data->sdcb.tx_list_push_index - 1);
 	for (i = 0; i < SDIO_DEBUG_POINT_NUM; i++) {
-		pr_info("[%d]chn:%d, time=%llu, %p, %p, %d, %d%s", i, txp[i].channel,
+		pr_debug("[%d]chn:%d, time=%llu, %p, %p, %d, %d%s", i, txp[i].channel,
 			txp[i].cur_time, txp[i].head, txp[i].tail, txp[i].num, txp[i].tx_driect,
 			(i == p_data->sdcb.tx_list_push_index - 1) ? "[LAST]":"");
 	}
 
-	pr_info("SDIOHAL RX DEBUG POINT[%d]:\n", p_data->sdcb.rx_list_dispatch_index - 1);
+	pr_debug("SDIOHAL RX DEBUG POINT[%d]:\n", p_data->sdcb.rx_list_dispatch_index - 1);
 	for (i = 0; i < SDIO_DEBUG_POINT_NUM; i++) {
-		pr_info("[%d]chn:%d, time=%llu, %p, %p, %d, %d%s", i, rxp[i].channel,
+		pr_debug("[%d]chn:%d, time=%llu, %p, %p, %d, %d%s", i, rxp[i].channel,
 			rxp[i].cur_time, rxp[i].head, rxp[i].tail, rxp[i].num, rxp[i].tx_driect,
 			(i == p_data->sdcb.rx_list_dispatch_index - 1) ? "[LAST]":"");
 	}
@@ -96,7 +96,7 @@ void sdiohal_print_list_data(struct sdiohal_list_t *data_list,
 {
 	struct mbuf_t *node;
 	int i;
-	unsigned short print_len;
+	unsigned short print_len __maybe_unused;
 	char print_str[64];
 
 	if (!data_list || !data_list->mbuf_head) {
@@ -125,7 +125,7 @@ void sdiohal_print_mbuf_data(int channel, struct mbuf_t *head,
 {
 	struct mbuf_t *node;
 	int i;
-	unsigned short print_len;
+	unsigned short print_len __maybe_unused;
 	char print_str[64];
 
 	if (!head) {
@@ -501,7 +501,7 @@ void sdiohal_resume_check(void)
 	WARN(!ret, "timeout(%lu s) for system resume", SDIOHAL_RESUME_TIMEOUT / MSEC_PER_SEC);
 
 	if (show)
-		pr_info("resume time:%ums\n", SDIOHAL_RESUME_TIMEOUT - jiffies_to_msecs(ret));
+		pr_debug("resume time:%ums\n", SDIOHAL_RESUME_TIMEOUT - jiffies_to_msecs(ret));
 }
 
 void sdiohal_op_enter(void)
@@ -774,7 +774,7 @@ int sdiohal_tx_list_denq(struct sdiohal_list_t *data_list)
 	struct mchn_ops_t *sdiohal_ops;
 
 	struct timespec64 tm_begin, tm_end;
-	static long time_total_ns;
+	static long time_total_ns __maybe_unused;
 	static int times_count;
 
 	sdiohal_tx_pop_assignment(data_list);
@@ -842,7 +842,7 @@ int sdiohal_rx_list_dispatch(void)
 	struct mchn_ops_t *sdiohal_ops;
 
 	struct timespec64 tm_begin, tm_end;
-	static long time_total_ns;
+	static long time_total_ns __maybe_unused;
 	static int times_count;
 
 	if (unlikely(p_data->flag_init != true))
@@ -1141,7 +1141,7 @@ static int sdiohal_rx_mbuf_create(void)
 	if (p_data->rx_mbuf_cache)
 		return 0;
 
-	pr_info("%s no mem for mbuf cache\n", __func__);
+	pr_err_ratelimited("%s no mem for mbuf cache\n", __func__);
 
 	return -ENOMEM;
 }
@@ -1231,7 +1231,7 @@ int sdiohal_list_push(int channel, struct mbuf_t *head,
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
 	struct timespec64 tm_begin, tm_end;
-	static long time_total_ns;
+	static long time_total_ns __maybe_unused;
 	static int times_count;
 	struct mbuf_t *mbuf_node;
 	int i;

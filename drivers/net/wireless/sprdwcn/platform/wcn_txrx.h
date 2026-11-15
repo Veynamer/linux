@@ -34,6 +34,8 @@
 
 #define SMP_HEAD_STR "at+smphead="
 
+struct mdbg_ring_stats;
+
 struct ring_rx_data {
 	unsigned char		*addr;
 	unsigned int		len;
@@ -119,6 +121,7 @@ long int mdbg_receive(void *buf, int len);
 int mdbg_tx_cb(int channel, struct mbuf_t *head,
 	       struct mbuf_t *tail, int num);
 long mdbg_content_len(void);
+void mdbg_get_ring_stats(struct mdbg_ring_stats *stats);
 int mdbg_read_release(unsigned int fifo_id);
 bool mdbg_rx_count_change(void);
 

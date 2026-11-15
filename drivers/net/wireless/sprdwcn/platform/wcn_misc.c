@@ -26,12 +26,12 @@
 #include "wcn_procfs.h"
 #include "wcn_txrx.h"
 #include "mdbg_type.h"
+#include "sysfs.h"
 #include "../include/wcn_dbg.h"
 #if IS_ENABLED(CONFIG_SPRD_POWER_DEBUG)
-#include "sysfs.h"
 #include <linux/soc/sprd/sprd_pdbg.h>
 #endif
-static struct atcmd_fifo s_atcmd_owner;
+
 static struct wcn_tm tm;
 static unsigned long long s_marlin_bootup_time;
 
@@ -43,76 +43,6 @@ static struct wcn_slpinfo_desc *wcn_get_slpinfo_data(void)
 	return &g_slpinfo;
 }
 #endif
-
-void mdbg_atcmd_owner_init(void)
-{
-	memset(&s_atcmd_owner, 0, sizeof(s_atcmd_owner));
-	mutex_init(&s_atcmd_owner.lock);
-}
-
-void mdbg_atcmd_owner_deinit(void)
-{
-	mutex_destroy(&s_atcmd_owner.lock);
-}
-
-static void mdbg_atcmd_owner_add(enum atcmd_owner owner)
-{
-	mutex_lock(&s_atcmd_owner.lock);
-	s_atcmd_owner.owner[s_atcmd_owner.tail % ATCMD_FIFO_MAX] = owner;
-	s_atcmd_owner.tail++;
-	mutex_unlock(&s_atcmd_owner.lock);
-}
-
-enum atcmd_owner mdbg_atcmd_owner_peek(void)
-{
-	enum atcmd_owner owner;
-
-	mutex_lock(&s_atcmd_owner.lock);
-	owner = s_atcmd_owner.owner[s_atcmd_owner.head % ATCMD_FIFO_MAX];
-	s_atcmd_owner.head++;
-	mutex_unlock(&s_atcmd_owner.lock);
-
-	WCN_INFO("owner=%d, head=%d\n", owner, s_atcmd_owner.head - 1);
-	return owner;
-}
-
-void mdbg_atcmd_clean(void)
-{
-	mutex_lock(&s_atcmd_owner.lock);
-	memset(&s_atcmd_owner.owner[0], 0, ARRAY_SIZE(s_atcmd_owner.owner));
-	s_atcmd_owner.tail = 0;
-	s_atcmd_owner.head = 0;
-	mutex_unlock(&s_atcmd_owner.lock);
-}
-
-/*
- * Until now, CP2 response every AT CMD to AP side
- * without owner-id.AP side transfer every ATCMD
- * response info to WCND.If AP send AT CMD on kernel layer,
- * and the response info transfer to WCND,
- * WCND deal other owner's response CMD.
- * We'll not modify CP2 codes because some
- * products already released to customer.
- * We will save all of the owner-id to the atcmd fifo.
- * and dispatch the response ATCMD info to the matched owner.
- * We'd better send all of the ATCMD with this function
- * or caused WCND error
- */
-long int mdbg_send_atcmd(char *buf, size_t len, enum atcmd_owner owner)
-{
-	long int sent_size = 0;
-
-	mdbg_atcmd_owner_add(owner);
-
-	/* confirm write finish */
-	mutex_lock(&s_atcmd_owner.lock);
-	sent_size = mdbg_send(buf, len, MDBG_SUBTYPE_AT);
-	mutex_unlock(&s_atcmd_owner.lock);
-
-	WCN_INFO("%s, owner=%d\n", buf, owner);
-
-	return sent_size;
-}
 
 /* copy from function: kdb_gmtime */
 static void wcn_gmtime(struct timespec64 *tv, struct wcn_tm *tm)
@@ -180,16 +110,14 @@ char *wcn_get_kernel_time(void)
 long int wcn_ap_notify_btwf_time(void)
 {
 	char *aptime;
-	long int send_cnt = 0;
+	int ret;
 
 	aptime = wcn_get_kernel_time();
 
-	/* send to BTWF CP2 */
-	send_cnt = mdbg_send_atcmd((void *)aptime, strlen(aptime),
-				   WCN_ATCMD_KERNEL);
-	WCN_INFO("%s, send_cnt=%ld", aptime, send_cnt);
+	ret = wcn_send_atcmd((void *)aptime, strlen(aptime), NULL, NULL);
+	WCN_DBG("%s, ret=%d", aptime, ret);
 
-	return send_cnt;
+	return ret;
 }
 
 /*
@@ -202,8 +130,8 @@ long int wcn_ap_notify_btwf_time(void)
 void marlin_bootup_time_update(void)
 {
 	s_marlin_bootup_time = local_clock();
-	WCN_INFO("s_marlin_bootup_time=%llu",
-		 s_marlin_bootup_time);
+	WCN_DBG("s_marlin_bootup_time=%llu",
+		s_marlin_bootup_time);
 }
 
 unsigned long long marlin_bootup_time_get(void)

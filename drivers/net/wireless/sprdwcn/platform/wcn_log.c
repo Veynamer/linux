@@ -41,7 +41,7 @@ void wcnlog_clear_log(void)
 {
 	if (mdbg_dev->ring_dev->ring->rp
 		!= mdbg_dev->ring_dev->ring->wp) {
-		WCN_INFO("log:%ld left in ringbuf not read\n",
+		WCN_DBG("log:%ld left in ringbuf not read\n",
 			(long int)(mdbg_dev->ring_dev->ring->wp -
 			mdbg_dev->ring_dev->ring->rp));
 		mdbg_ring_clear(mdbg_dev->ring_dev->ring);
@@ -56,7 +56,7 @@ static int wcnlog_open(struct inode *inode, struct file *filp)
 	int minor1 = iminor(inode);
 	int major = imajor(inode);
 
-	WCN_INFO("minor=%d,minor1=%d,major=%d\n", minor, minor1, major);
+	WCN_DBG("minor=%d,minor1=%d,major=%d\n", minor, minor1, major);
 
 	if (mdbg_dev->exit_flag) {
 		WCN_ERR("%s exit!\n", __func__);
@@ -66,7 +66,7 @@ static int wcnlog_open(struct inode *inode, struct file *filp)
 	dev = container_of(inode->i_cdev, struct wcnlog_dev, cdev);
 	filp->private_data = dev;
 
-	WCN_DEBUG("%s z=%d,major=%d,minor = %d\n", __func__,
+	WCN_DBG("%s z=%d,major=%d,minor = %d\n", __func__,
 		dev->cdev.dev, MAJOR(dev->cdev.dev), MINOR(dev->cdev.dev));
 
 	if (mdbg_dev->open_count != 0)
@@ -81,7 +81,7 @@ static int wcnlog_release(struct inode *inode, struct file *filp)
 {
 	struct wcnlog_dev *dev = filp->private_data;
 
-	WCN_INFO("z=%d,major=%d,minor = %d\n",
+	WCN_DBG("z=%d,major=%d,minor = %d\n",
 		dev->cdev.dev, MAJOR(dev->cdev.dev), MINOR(dev->cdev.dev));
 	mdbg_dev->open_count--;
 
@@ -114,15 +114,15 @@ static ssize_t wcnlog_read(struct file *filp,
 	if (filp->f_flags & O_NONBLOCK)
 		timeout = 0;
 
-	WCN_DEBUG("read timeout=%d,major=%d, minor=%d\n",
+	WCN_DBG("read timeout=%d,major=%d, minor=%d\n",
 		timeout, dev->major, dev->minor);
 
-	WCN_DEBUG("%s z=%d,major=%d,minor = %d\n", __func__, dev->cdev.dev,
+	WCN_DBG("%s z=%d,major=%d,minor = %d\n", __func__, dev->cdev.dev,
 		MAJOR(dev->cdev.dev), MINOR(dev->cdev.dev));
 	/* count :100K-log, 32K-mem ;cat :4096 */
-	WCN_DEBUG("%s len = %ld\n", __func__, (long)count);
+	WCN_DBG("%s len = %ld\n", __func__, (long)count);
 	if (MINOR(dev->cdev.dev) == 1) {
-		WCN_INFO("unsupported to read slog_wcn1: BT audio data\n");
+		WCN_DBG("unsupported to read slog_wcn1: BT audio data\n");
 		return -EPERM;
 	}
 
@@ -137,25 +137,25 @@ static ssize_t wcnlog_read(struct file *filp,
 		rval = wait_event_interruptible(mdbg_wait,
 				(mdbg_content_len() > 0));
 		if (rval < 0)
-			WCN_INFO("wait interrupted=%d\n", rval);
+			WCN_DBG("wait interrupted=%d\n", rval);
 	}
 
 	mutex_lock(&mdbg_dev->mdbg_lock);
 	read_size = mdbg_receive((void *)buf, count);
 	if (sprdwcn_bus_get_carddump_status() == 1) {
 		dum_send_size += read_size;
-		WCN_INFO("read_size = %ld dum_total_size= %d,remainder =%ld\n",
+		WCN_DBG("read_size = %ld dum_total_size= %d,remainder =%ld\n",
 				read_size, dum_send_size, mdbg_content_len());
 	}
 	/* read_size = log1040 or mem32K, 1024 */
 	if (read_size > 0) {
-		WCN_DEBUG("Show %ld bytes data.", read_size);
+		WCN_DBG("Show %ld bytes data.", read_size);
 		rval = read_size;
 	} else if (read_size == 0)
 		rval = -EAGAIN;
 	else {
 		rval = read_size;
-		WCN_DEBUG("log read error %d\n", rval);
+		WCN_DBG("log read error %d\n", rval);
 	}
 	mutex_unlock(&mdbg_dev->mdbg_lock);
 
@@ -174,7 +174,7 @@ static ssize_t wcnlog_write(struct file *filp,
 		return -EIO;
 	}
 
-	WCN_INFO("%s count=%ld\n", __func__, (long int)count);
+	WCN_DBG("%s count=%ld\n", __func__, (long int)count);
 	if (count > MDBG_WRITE_SIZE) {
 		WCN_ERR("mdbg_write count > MDBG_WRITE_SIZE\n");
 		return -ENOMEM;
@@ -191,7 +191,7 @@ static ssize_t wcnlog_write(struct file *filp,
 	mutex_unlock(&mdbg_dev->mdbg_lock);
 	kfree(p_data);
 
-	WCN_DEBUG("sent_size = %ld", sent_size);
+	WCN_DBG("sent_size = %ld", sent_size);
 
 	return sent_size;
 }
@@ -200,9 +200,9 @@ static unsigned int wcnlog_poll(struct file *filp, poll_table *wait)
 {
 	unsigned int mask = 0;
 
-	WCN_LOG("%s\n", __func__);
+	WCN_DBG("%s\n", __func__);
 	if ((!mdbg_dev) || (mdbg_dev->exit_flag)) {
-		WCN_INFO("%s exit!\n", __func__);
+		WCN_DBG("%s exit!\n", __func__);
 		mask |= POLLIN | POLLERR;
 		return mask;
 	}
@@ -250,7 +250,7 @@ static int wcnlog_register_device(struct wcnlog_dev *dev, int index)
 	}
 	dev->major = MAJOR(devno);
 	dev->minor = MINOR(devno);
-	WCN_INFO("log dev major=%d,minor=%d\n", dev->major, dev->minor);
+	WCN_DBG("log dev major=%d,minor=%d\n", dev->major, dev->minor);
 	device_create(wcnlog_class, NULL,
 			MKDEV(MAJOR(devno), MINOR(devno)),
 			NULL, "%s%d", "slog_wcn", index);
@@ -267,7 +267,7 @@ int log_cdev_init(void)
 
 	struct wcnlog_dev *dev[WCN_LOG_MAX_MINOR] = {NULL};
 
-	WCN_INFO("%s\n", __func__);
+	WCN_DBG("%s\n", __func__);
 	wcnlog_class = class_create("slog_wcn");
 	if (IS_ERR(wcnlog_class))
 		return PTR_ERR(wcnlog_class);
@@ -277,7 +277,7 @@ int log_cdev_init(void)
 		ret = register_chrdev_region(devno,
 				WCN_LOG_MAX_MINOR, "wcnlog");
 	if (ret < 0) {
-		WCN_INFO("failed to apply for static device number");
+		WCN_DBG("failed to apply for static device number");
 		ret = alloc_chrdev_region(&devno, 0,
 				WCN_LOG_MAX_MINOR, "wcnlog");
 		wcn_log_major = MAJOR(devno);
@@ -317,7 +317,7 @@ int log_cdev_exit(void)
 	struct wcnlog_dev *dev[WCN_LOG_MAX_MINOR];
 	int i;
 
-	WCN_INFO("log_cdev_exit\n");
+	WCN_DBG("log_cdev_exit\n");
 
 	for (i = 0; i < WCN_LOG_MAX_MINOR; i++) {
 		dev[i] = mdbg_dev->dev[i];

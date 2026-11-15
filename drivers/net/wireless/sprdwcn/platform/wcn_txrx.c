@@ -31,7 +31,7 @@ static int mdbg_log_read(int channel, struct mbuf_t *head,
 		mutex_lock(&ring_dev->mdbg_read_mutex);
 		rx = kmalloc(sizeof(*rx), GFP_KERNEL);
 		if (!rx) {
-			WCN_ERR("mdbg ring low memory\n");
+			WCN_ERR_RL("mdbg ring low memory\n");
 			mutex_unlock(&ring_dev->mdbg_read_mutex);
 			sprdwcn_bus_push_list(channel, head, tail, num);
 			return 0;
@@ -92,6 +92,24 @@ long mdbg_content_len(void)
 	return mdbg_ring_readable_len(ring_dev->ring);
 }
 
+void mdbg_get_ring_stats(struct mdbg_ring_stats *stats)
+{
+	struct mdbg_ring_t *ring;
+
+	if (!stats)
+		return;
+
+	memset(stats, 0, sizeof(*stats));
+	if (unlikely(!ring_dev) || !ring_dev->ring)
+		return;
+
+	ring = ring_dev->ring;
+	stats->written = ring->total_written;
+	stats->read = ring->total_read;
+	stats->dropped = ring->total_dropped;
+	stats->used = mdbg_ring_readable_len(ring);
+}
+
 static long int mdbg_comm_write(char *buf,
 				size_t len, unsigned int subtype)
 {
@@ -123,11 +141,11 @@ static long int mdbg_comm_write(char *buf,
 		int ret;
 
 		/* for arm log to pc */
-		WCN_INFO("smp len:%lu,str:%s\n", len, str);
+		WCN_DBG("smp len:%lu,str:%s\n", len, str);
 		str[sizeof(SMP_HEAD_STR)] = 0;
 		ret = kstrtol(&str[sizeof(SMP_HEAD_STR) - 1], 10,
 							&ring_dev->flag_smp);
-		WCN_INFO("smp ret:%d, flag_smp:%ld\n", ret,
+		WCN_DBG("smp ret:%d, flag_smp:%ld\n", ret,
 			 ring_dev->flag_smp);
 		kfree(send_buf);
 	} else {
@@ -167,7 +185,7 @@ static void mdbg_ring_rx_task(struct work_struct *work)
 	if (rx) {
 		list_del(&rx->entry);
 	} else {
-		WCN_WARN("tasklet something err\n");
+		WCN_WARN_RL("tasklet something err\n");
 		spin_unlock_bh(&ring_dev->rw_lock);
 		return;
 	}
@@ -192,7 +210,7 @@ long int mdbg_send(char *buf, size_t len, unsigned int subtype)
 {
 	long int sent_size = 0;
 
-	WCN_DEBUG("BYTE MODE");
+	WCN_DBG("BYTE MODE");
 	__pm_stay_awake(ring_dev->rw_wake_lock);
 	sent_size = mdbg_comm_write(buf, len, subtype);
 	__pm_relax(ring_dev->rw_wake_lock);
@@ -227,7 +245,7 @@ void mdbg_pt_ring_reg(void)
 {
 	struct mchn_ops_t *p_mdbg_ringc_ops = get_mdbg_ringc_ops();
 
-	WCN_INFO("%s\n", __func__);
+	WCN_DBG("%s\n", __func__);
 	atomic_set(&ring_reg_flag, 0x1);
 	sprdwcn_bus_chn_init(p_mdbg_ringc_ops);
 }
@@ -236,7 +254,7 @@ void mdbg_pt_ring_unreg(void)
 {
 	struct mchn_ops_t *p_mdbg_ringc_ops = get_mdbg_ringc_ops();
 
-	WCN_INFO("%s\n", __func__);
+	WCN_DBG("%s\n", __func__);
 	atomic_set(&ring_reg_flag, 0x0);
 	sprdwcn_bus_chn_deinit(p_mdbg_ringc_ops);
 }
@@ -271,7 +289,7 @@ int mdbg_ring_init(void)
 	INIT_WORK(&ring_dev->rx_task, mdbg_ring_rx_task);
 	ring_dev->flag_smp = 0;
 	mdbg_pt_ring_reg();
-	WCN_INFO("success!");
+	WCN_DBG("success!");
 
 	mdbg_dev->ring_dev = ring_dev;
 

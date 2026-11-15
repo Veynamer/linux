@@ -32,13 +32,9 @@
 ({								\
 	static DEFINE_RATELIMIT_STATE(_wcn_rs,			\
 				      (inter * HZ), burst);	\
-	static unsigned int _wcn_last;				\
 								\
-	if (__ratelimit(&_wcn_rs)) {				\
-		printk(fmt " [rate:%u]\n", ##__VA_ARGS__,	\
-		       (now - _wcn_last) / inter);		\
-		_wcn_last = now;				\
-	}							\
+	if (__ratelimit(&_wcn_rs))				\
+		printk(fmt "\n", ##__VA_ARGS__);		\
 })
 #else
 #define wcn_printk_ratelimited(inter, burst, now, fmt, ...)
@@ -46,7 +42,7 @@
 
 #define wcn_pr_daterate(inter, burst, now, fmt, ...)		\
 	wcn_printk_ratelimited(inter, burst, now,		\
-			KERN_INFO pr_fmt(fmt), ##__VA_ARGS__)
+			KERN_DEBUG pr_fmt(fmt), ##__VA_ARGS__)
 
 #define MDBG_SUCCESS		0
 #define MDBG_ERR_RING_FULL	1

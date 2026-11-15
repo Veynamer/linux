@@ -14,10 +14,8 @@
 #include "../sdio/sdiohal.h"
 #include "wcn_dbg.h"
 #include "wcn_glb.h"
+#include "sysfs.h"
 
-static int is_wcn_shutdown;
-
-bool isInAtCmd;
 struct wcn_sysfs_info sysfs_info;
 
 void wcn_send_atcmd_lock(void)
@@ -30,7 +28,7 @@ void wcn_send_atcmd_unlock(void)
 	mutex_unlock(&sysfs_info.mutex);
 }
 
-int notify_at_cmd_finish(void *buf, unsigned char len)
+int notify_at_cmd_finish(void *buf, size_t len)
 {
 	sysfs_info.p = buf;
 	sysfs_info.len = len;
@@ -50,9 +48,13 @@ int wcn_send_atcmd(void *cmd, size_t cmd_len,
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
 	unsigned int pub_head_rsv = SDIOHAL_PUB_HEAD_RSV;
 	unsigned char *com_buf = NULL;
+	size_t capacity;
+
+	if (!cmd_len || cmd_len > USHRT_MAX)
+		return -EINVAL;
 
 	if (!WCN_CARD_EXIST(&p_data->xmit_cnt)) {
-		WCN_INFO("%s:already power off\n", __func__);
+		WCN_DBG("%s:already power off\n", __func__);
 		return 0;
 	}
 
@@ -64,7 +66,7 @@ int wcn_send_atcmd(void *cmd, size_t cmd_len,
 		return -1;
 	}
 
-	com_buf = kzalloc(128 + pub_head_rsv + 1, GFP_KERNEL);
+	com_buf = kzalloc(cmd_len + pub_head_rsv + 1, GFP_KERNEL);
 	if (!com_buf) {
 		wcn_send_atcmd_unlock();
 		return -ENOMEM;
@@ -77,11 +79,11 @@ int wcn_send_atcmd(void *cmd, size_t cmd_len,
 	reinit_completion(&sysfs_info.cmd_completion);
 	ret = sprdwcn_bus_push_list(0, head, tail, num);
 	if (ret)
-		WCN_INFO("sprdwcn_bus_push_list error=%d\n", ret);
+		WCN_ERR("sprdwcn_bus_push_list error=%d\n", ret);
 	timeleft = wait_for_completion_timeout(&sysfs_info.cmd_completion,
 					       3 * HZ);
 	if (!WCN_CARD_EXIST(&p_data->xmit_cnt)) {
-		WCN_INFO("%s:already power off\n", __func__);
+		WCN_DBG("%s:already power off\n", __func__);
 		wcn_send_atcmd_unlock();
 		return 0;
 	}
@@ -97,10 +99,15 @@ int wcn_send_atcmd(void *cmd, size_t cmd_len,
 		return 0;
 	}
 
-	if (*response_len == WCN_AT_RSP_RAW_FLAG)
+	if (*response_len == WCN_AT_RSP_RAW_FLAG) {
 		memcpy(response, sysfs_info.p, sysfs_info.len);
-	else
-		scnprintf(response, (size_t)sysfs_info.len, "%s", (char *)sysfs_info.p);
+	} else {
+		capacity = *response_len ?: sysfs_info.len;
+		if (capacity)
+			scnprintf(response, capacity, "%s", (char *)sysfs_info.p);
+		else
+			((char *)response)[0] = '\0';
+	}
 	*response_len = sysfs_info.len;
 
 	WCN_DBG("len=%zu, buf=%s\n", *response_len, (char *)(response));
@@ -119,10 +126,6 @@ static int wcn_get_sw_ver(void)
 {
 	char a[] = "at+spatgetcp2info\r\n";
 
-	/*
-	 * len is 64bit, belows function 32bit, need assigned 0 to len,
-	 * make sure high 32bit=0
-	 */
 	wcn_send_atcmd(a, strlen(a), &sysfs_info.sw_ver_buf,
 		       &sysfs_info.sw_ver_len);
 
@@ -132,64 +135,126 @@ static int wcn_get_sw_ver(void)
 	return 0;
 }
 
-static int wcn_set_armlog_status(void)
+int wcn_fw_armlog_set(unsigned int enable)
 {
-	char a[16];
+	char a[32];
 
-	scnprintf(a, (size_t)sizeof(a), "%s%d%s", "at+armlog=",
-		  sysfs_info.armlog_status, "\r\n");
-	WCN_INFO("%s:%s", __func__, a);
-	wcn_send_atcmd(a, strlen(a), NULL, NULL);
-
-	return 0;
-}
-
-static int wcn_set_loglevel(void)
-{
-	char a[64];
-
-	if (atomic_read(&sysfs_info.set_mask)
-		& WCN_SYSFS_LOGLEVEL_SET_BIT) {
-		scnprintf(a, (size_t)sizeof(a), "%s%d%s", "at+loglevel=",
-			  sysfs_info.loglevel, "\r\n");
-		WCN_INFO("%s:%s\n", __func__, a);
-		wcn_send_atcmd(a, strlen(a), NULL, NULL);
-		atomic_and((unsigned int)(~(WCN_SYSFS_LOGLEVEL_SET_BIT)),
-			   &sysfs_info.set_mask);
-	}
-
-	return 0;
-}
-
-static int wcn_get_loglevel(void)
-{
-	unsigned long tmp;
-	int ret;
-	char a[] = "at+loglevel?\r\n";
-
-	wcn_send_atcmd(a, strlen(a), &sysfs_info.loglevel_buf,
-		       &sysfs_info.loglevel_len);
-
-	ret = kstrtoul(sysfs_info.loglevel_buf + 11, 10, &tmp);
-	if (ret < 0) {
-		WCN_ERR("incorrect get loglevel\n");
+	if (enable > 1)
 		return -EINVAL;
-	}
 
-	WCN_DBG("show:len=%zd, buf=%s, level=%d\n", sysfs_info.loglevel_len,
-		sysfs_info.loglevel_buf, sysfs_info.loglevel);
+	sysfs_info.armlog_status = enable;
+	if (!marlin_get_module_status())
+		return 0;
 
-	return 0;
+	scnprintf(a, sizeof(a), "at+armlog=%u\r\n", enable);
+	WCN_DBG("%s:%s", __func__, a);
+
+	return wcn_send_atcmd(a, strlen(a), NULL, NULL);
 }
 
-void wcn_firmware_init(void)
+int wcn_fw_armlog_get(char *buf, size_t size)
 {
+	size_t len = size;
+	int ret;
+
+	if (!buf || size < 2)
+		return -EINVAL;
+
+	if (!marlin_get_module_status())
+		return scnprintf(buf, size, "+ARMLOG: %u",
+				 sysfs_info.armlog_status);
+
+	ret = wcn_send_atcmd("at+armlog?\r\n", strlen("at+armlog?\r\n"),
+			     buf, &len);
+	if (ret)
+		return ret;
+
+	if (!strncmp(buf, "+ARMLOG: ", strlen("+ARMLOG: "))) {
+		buf[0] = buf[strlen("+ARMLOG: ")];
+		buf[1] = '\0';
+	} else {
+		buf[0] = '\0';
+	}
+
+	return strlen(buf);
+}
+
+int wcn_fw_loglevel_set(unsigned int level)
+{
+	char a[32];
+	int ret = 0;
+
+	if (level >= 6)
+		return -EINVAL;
+
+	sysfs_info.loglevel = level;
+	if (!marlin_get_module_status()) {
+		atomic_or(WCN_SYSFS_LOGLEVEL_SET_BIT, &sysfs_info.set_mask);
+		return 0;
+	}
+
+	scnprintf(a, sizeof(a), "at+loglevel=%u\r\n", level);
+	WCN_DBG("%s:%s\n", __func__, a);
+	ret = wcn_send_atcmd(a, strlen(a), NULL, NULL);
+	if (!ret)
+		atomic_and((unsigned int)(~WCN_SYSFS_LOGLEVEL_SET_BIT),
+			   &sysfs_info.set_mask);
+
+	return ret;
+}
+
+int wcn_fw_loglevel_get(char *buf, size_t size)
+{
+	unsigned int level;
+	size_t len = size;
+	int ret;
+
+	if (!buf || !size)
+		return -EINVAL;
+
+	if (!marlin_get_module_status()) {
+		if (sysfs_info.loglevel >= 6)
+			sysfs_info.loglevel = 0;
+		return scnprintf(buf, size, "+LOGLEVEL: %u",
+				 sysfs_info.loglevel);
+	}
+
+	ret = wcn_send_atcmd("at+loglevel?\r\n", strlen("at+loglevel?\r\n"),
+			     buf, &len);
+	if (ret)
+		return ret;
+
+	if (!strncmp(buf, "+LOGLEVEL: ", strlen("+LOGLEVEL: ")) &&
+	    !kstrtouint(buf + strlen("+LOGLEVEL: "), 10, &level))
+		sysfs_info.loglevel = level;
+
+	WCN_DBG("show:len=%zd, buf=%s, level=%u\n", len, buf,
+		sysfs_info.loglevel);
+
+	return strlen(buf);
+}
+
+int wcn_firmware_init(void)
+{
+	char level[64];
+	int ret;
+	int err = 0;
+
 	wcn_get_sw_ver();
-	wcn_set_armlog_status();
-	wcn_set_loglevel();
-	wcn_get_loglevel();
-	/* TODO: set can pass functionmask */
-	/* wcn_set_loglevel, etc */
+
+	ret = wcn_fw_armlog_set(sysfs_info.armlog_status);
+	if (ret)
+		err = ret;
+
+	if (atomic_read(&sysfs_info.set_mask) & WCN_SYSFS_LOGLEVEL_SET_BIT) {
+		ret = wcn_fw_loglevel_set(sysfs_info.loglevel);
+		if (ret)
+			err = ret;
+	}
+
+	wcn_fw_loglevel_get(level, sizeof(level));
+
+	return err;
 }
 
 void wcn_firmware_init_wq(struct work_struct *work)
@@ -197,94 +262,30 @@ void wcn_firmware_init_wq(struct work_struct *work)
 	wcn_firmware_init();
 }
 
-static ssize_t wcn_sysfs_show_sleep_state(struct device *dev,
-					  struct device_attribute *attr,
-					  char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%s\n", "not support to read");
-}
-
-static ssize_t wcn_sysfs_store_sleep_state(struct device *dev,
-					   struct device_attribute *attr,
-					   const char *buf, size_t count)
-{
-	unsigned long res;
-	int ret;
-	char a[64];
-
-	ret = kstrtoul(buf, 10, &res);
-	if (ret < 0) {
-		WCN_ERR("incorrect value written to sleep\n");
-		return -EINVAL;
-	}
-
-	if (res == 1) {
-		/* close CP2 sleep function */
-		scnprintf(a, (size_t)sizeof(a), "%s", "at+debug=1\r\n");
-		wcn_send_atcmd(a, strlen(a), NULL, NULL);
-	} else if (res == 0) {
-		/* open CP2 sleep function */
-		scnprintf(a, (size_t)sizeof(a), "%s", "at+debug=0\r\n");
-		wcn_send_atcmd(a, strlen(a), NULL, NULL);
-	} else {
-		WCN_ERR("incorrect value written to sleep\n");
-		return -EINVAL;
-	}
-
-	return count;
-}
-
-/* S_IRUGO | S_IWUSR */
-static DEVICE_ATTR(sleep_state, 0644,
-		   wcn_sysfs_show_sleep_state,
-		   wcn_sysfs_store_sleep_state);
-
 static ssize_t wcn_sysfs_show_sw_ver(struct device *dev,
 				     struct device_attribute *attr,
 				     char *buf)
 {
-	size_t len = 0;
+	size_t len = PAGE_SIZE;
 	char a[] = "at+spatgetcp2info\r\n";
-	isInAtCmd = true;
 
-	WCN_INFO("%s \n", __func__);
+	WCN_DBG("%s \n", __func__);
 	if (!marlin_get_module_status()) {
 		memcpy(buf, sysfs_info.sw_ver_buf, sysfs_info.sw_ver_len);
-		isInAtCmd = false;
 		return sysfs_info.sw_ver_len;
 	}
 
-	/*
-	 * len is 64bit, belows function 32bit, need assigned 0 to len,
-	 * make sure high 32bit=0
-	 */
 	wcn_send_atcmd(a, strlen(a), buf, &len);
 
-	WCN_INFO("show:len=%zd, buf=%s\n", len, buf);
-	/* because cp2 pass wrong len */
+	WCN_DBG("show:len=%zd, buf=%s\n", len, buf);
 	len = strlen(buf);
-	WCN_INFO("show:len=%zd\n", len);
-	isInAtCmd = false;
+	WCN_DBG("show:len=%zd\n", len);
 
 	return len;
 }
 
-/* S_IRUGO */
 static DEVICE_ATTR(sw_ver, 0444,
 		   wcn_sysfs_show_sw_ver, NULL);
-
-static ssize_t wcn_sysfs_read_fwlog(struct file *filp, struct kobject *kobj,
-				    const struct bin_attribute *bin_attr,
-				    char *buffer, loff_t pos, size_t count)
-{
-	return 0;
-}
-
-/* S_IRUSR */
-static const struct bin_attribute fwlog_attr = {
-	.attr = {.name = "fwlog", .mode = 0400},
-	.read = wcn_sysfs_read_fwlog,
-};
 
 static ssize_t wcn_sysfs_show_hw_ver(struct device *dev,
 				     struct device_attribute *attr,
@@ -294,89 +295,28 @@ static ssize_t wcn_sysfs_show_hw_ver(struct device *dev,
 
 	len = PAGE_SIZE;
 	mutex_lock(&sysfs_info.mutex);
-	len = snprintf(buf, len, "%s\n", wcn_get_chip_name());
+	len = scnprintf(buf, len, "%s\n", wcn_get_chip_name());
 	mutex_unlock(&sysfs_info.mutex);
 
 	return len;
 }
 
-static ssize_t wcn_sysfs_store_hw_ver(struct device *dev,
-				      struct device_attribute *attr,
-				      const char *buf, size_t count)
-{
-	return count;
-}
-
-static DEVICE_ATTR(hw_ver, 0644,
-		   wcn_sysfs_show_hw_ver,
-		   wcn_sysfs_store_hw_ver);
-
-static ssize_t wcn_sysfs_show_watchdog_state(struct device *dev,
-					     struct device_attribute *attr,
-					     char *buf)
-{
-	ssize_t len;
-
-	len = PAGE_SIZE;
-	mutex_lock(&sysfs_info.mutex);
-
-	/* len:4 */
-	len = snprintf(buf, len, "not support\n");
-	mutex_unlock(&sysfs_info.mutex);
-
-	return len;
-}
-
-static ssize_t wcn_sysfs_store_watchdog_state(struct device *dev,
-					      struct device_attribute *attr,
-					      const char *buf, size_t count)
-{
-	size_t len = 0;
-	char a[] = "at+cp2_enter_user=?\r\n";
-
-	WCN_INFO("%s: buf=%s\n", __func__, buf);
-
-	if (strncmp(buf, "1", 1) == 0) {
-		scnprintf(a, (size_t)sizeof(a), "%s",
-			  "at+cp2_enter_user=1\r\n");
-		wcn_send_atcmd(a, strlen(a), NULL, NULL);
-	} else if (strncmp(buf, "0", 1) == 0) {
-		scnprintf(a, (size_t)sizeof(a), "%s",
-			  "at+cp2_enter_user=0\r\n");
-		wcn_send_atcmd(a, strlen(a), NULL, NULL);
-	} else {
-		return -EINVAL;
-	}
-
-	len = strlen(buf);
-	WCN_INFO("show:len=%zd, count=%zd\n", len, count);
-
-	return count;
-}
-
-static DEVICE_ATTR(watchdog_state, 0644,
-		   wcn_sysfs_show_watchdog_state,
-		   wcn_sysfs_store_watchdog_state);
+static DEVICE_ATTR(hw_ver, 0444,
+		   wcn_sysfs_show_hw_ver, NULL);
 
 static ssize_t wcn_sysfs_show_armlog_status(struct device *dev,
 					    struct device_attribute *attr,
 					    char *buf)
 {
-	size_t len = 0;
-	char a[] = "at+armlog?\r\n";
+	int len;
 
-	wcn_send_atcmd(a, strlen(a), buf, &len);
+	len = wcn_fw_armlog_get(buf, PAGE_SIZE);
+	if (len < 0)
+		return len;
 
-	WCN_INFO("%s:len=%zd, buf=%s\n", __func__, len, buf);
-	if (!memcmp(buf, "+ARMLOG: ", strlen("+ARMLOG: "))) {
-		buf[0] = buf[strlen("+ARMLOG: ")];
-		buf[1] = '\0';
-	} else {
-		buf[0] = '\0';
-	}
-
-	len = strlen(buf);
-	WCN_INFO("show:len=%zd\n", len);
+	WCN_DBG("%s:len=%d, buf=%s\n", __func__, len, buf);
+	if (len && buf[len - 1] != '\n')
+		len += scnprintf(buf + len, PAGE_SIZE - len, "\n");
 
 	return len;
 }
@@ -387,7 +327,6 @@ static ssize_t wcn_sysfs_store_armlog_status(struct device *dev,
 {
 	unsigned long res;
 	int ret;
-	char a[64];
 
 	ret = kstrtoul(buf, 10, &res);
 	if (ret < 0) {
@@ -395,24 +334,15 @@ static ssize_t wcn_sysfs_store_armlog_status(struct device *dev,
 		return -EINVAL;
 	}
 
-	WCN_INFO("%s:set armlog = %ld\n", __func__, res);
-	sysfs_info.armlog_status = res;
-
-	if (!marlin_get_module_status())
-		return count;
-
-	if (res == 1) {
-		/* open CP2 armlog */
-		scnprintf(a, (size_t)sizeof(a), "%s", "at+armlog=1\r\n");
-		wcn_send_atcmd(a, strlen(a), NULL, NULL);
-	} else if (res == 0) {
-		/* close CP2 armlog */
-		scnprintf(a, (size_t)sizeof(a), "%s", "at+armlog=0\r\n");
-		wcn_send_atcmd(a, strlen(a), NULL, NULL);
-	} else {
-		WCN_ERR("incorrect value(%ld)written to armlog\n", res);
+	if (res > 1) {
+		WCN_ERR("incorrect value(%ld) written to armlog\n", res);
 		return -EINVAL;
 	}
+
+	WCN_DBG("%s:set armlog = %ld\n", __func__, res);
+	ret = wcn_fw_armlog_set(res);
+	if (ret)
+		return ret;
 
 	return count;
 }
@@ -420,30 +350,18 @@ static ssize_t wcn_sysfs_store_armlog_status(struct device *dev,
 static DEVICE_ATTR(armlog_status, 0644,
 		   wcn_sysfs_show_armlog_status,
 		   wcn_sysfs_store_armlog_status);
-/* wcn_sysfs_show_loglevel:len=128, buf=+LOGLEVEL: 0 */
+
 static ssize_t wcn_sysfs_show_loglevel(struct device *dev,
 				       struct device_attribute *attr,
 				       char *buf)
 {
-	size_t len = 0;
-	char a[] = "at+loglevel?\r\n";
+	int len;
 
-	WCN_INFO("%s:buf=%s\n", __func__, buf);
-	if (!marlin_get_module_status()) {
-		if (sysfs_info.loglevel >= 6)
-			sysfs_info.loglevel = 0;
-		scnprintf(buf, PAGE_SIZE, "%s: %d", "+LOGLEVEL",
-			  sysfs_info.loglevel);
-		len = strlen(buf);
-
+	len = wcn_fw_loglevel_get(buf, PAGE_SIZE);
+	if (len < 0)
 		return len;
-	}
 
-	wcn_send_atcmd(a, strlen(a), buf, &len);
-
-	WCN_INFO("%s:len=%zd, buf=%s\n", __func__, len, buf);
-	len = strlen(buf);
-	WCN_INFO("show:len=%zd\n", len);
+	WCN_DBG("%s:len=%d, buf=%s\n", __func__, len, buf);
 
 	return len;
 }
@@ -454,9 +372,8 @@ static ssize_t wcn_sysfs_store_loglevel(struct device *dev,
 {
 	unsigned long res;
 	int ret;
-	char a[64];
 
-	WCN_INFO("%s:buf=%s\n", __func__, buf);
+	WCN_DBG("%s:buf=%s\n", __func__, buf);
 	ret = kstrtoul(buf, 10, &res);
 	if (ret < 0) {
 		WCN_ERR("incorrect value written to loglevel\n");
@@ -464,23 +381,15 @@ static ssize_t wcn_sysfs_store_loglevel(struct device *dev,
 	}
 
 	if (res >= 6) {
-		WCN_ERR("incorrect value(%ld)written to loglevel\n", res);
+		WCN_ERR("incorrect value(%ld) written to loglevel\n", res);
 		return -EINVAL;
 	}
 
-	sysfs_info.loglevel = res;
+	ret = wcn_fw_loglevel_set(res);
+	if (ret)
+		return ret;
 
-	if (marlin_get_module_status()) {
-		scnprintf(a, (size_t)sizeof(a), "%s%ld%s", "at+loglevel=",
-			  res, "\r\n");
-		WCN_INFO("%s:buf=%s\n", __func__, a);
-		wcn_send_atcmd(a, strlen(a), NULL, NULL);
-		atomic_and((unsigned int)(~(WCN_SYSFS_LOGLEVEL_SET_BIT)),
-			   &sysfs_info.set_mask);
-	} else {
-		atomic_or(WCN_SYSFS_LOGLEVEL_SET_BIT, &sysfs_info.set_mask);
-	}
-	WCN_INFO("%s:set_mask:%d\n", __func__,
+	WCN_DBG("%s:set_mask:%d\n", __func__,
 		 atomic_read(&sysfs_info.set_mask));
 
 	return count;
@@ -489,93 +398,6 @@ static ssize_t wcn_sysfs_store_loglevel(struct device *dev,
 static DEVICE_ATTR(loglevel, 0644,
 		   wcn_sysfs_show_loglevel,
 		   wcn_sysfs_store_loglevel);
-
-static ssize_t wcn_sysfs_show_atcmd(struct device *dev,
-				    struct device_attribute *attr,
-				    char *buf)
-{
-	return scnprintf(buf, PAGE_SIZE, "%s\n", "not support to read");
-}
-
-static ssize_t wcn_sysfs_store_atcmd(struct device *dev,
-				     struct device_attribute *attr,
-				     const char *buf, size_t count)
-{
-	int ret;
-
-	WCN_INFO("%s: buf=%s\n", __func__, buf);
-
-	ret = wcn_send_atcmd((void *)buf, count, NULL, NULL);
-	if (ret < 0)
-		return ret;
-
-	return count;
-}
-
-static DEVICE_ATTR(atcmd, 0644,
-		   wcn_sysfs_show_atcmd,
-		   wcn_sysfs_store_atcmd);
-
-static ssize_t wcn_sysfs_show_shutting_down(struct device *dev,
-					 struct device_attribute *attr,
-					 char *buf)
-{
-	ssize_t len = PAGE_SIZE;
-
-	len = snprintf(buf, len, "%d\n", is_wcn_shutdown);
-
-	return len;
-}
-
-static ssize_t wcn_sysfs_store_shutting_down(struct device *dev,
-					  struct device_attribute *attr,
-					  const char *buf, size_t count)
-{
-	WCN_INFO("%s: buf=%s, count=%lu\n", __func__, buf, count);
-
-	if (strncmp(buf, "shutting", strlen("shutting")) == 0) {
-		WCN_INFO("%s:Ready to shutdown\n", __func__);
-		is_wcn_shutdown = 1;
-	} else {
-		WCN_INFO("%s:Clear WCN shutdown flag\n", __func__);
-		is_wcn_shutdown = 0;
-	}
-
-	return count;
-}
-static DEVICE_ATTR(shutting_down, 0644,
-		   wcn_sysfs_show_shutting_down,
-		   wcn_sysfs_store_shutting_down);
-
-static ssize_t slp_info_store(struct device *dev, struct device_attribute *attr,
-			const char *buf, size_t count)
-{
-	unsigned long res;
-	int ret;
-
-	ret = kstrtoul(buf, 10, &res);
-	if (ret < 0 || res > WCN_SOURCE_BTWF) {
-		WCN_ERR("incorrect value written to slp_info(0)\n");
-		return -EINVAL;
-	}
-
-	sysfs_info.slpinfo_sys = res;
-
-	return count;
-}
-
-static ssize_t slp_info_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	ssize_t len = PAGE_SIZE;
-
-	if (wcn_slpinfo_get(sysfs_info.slpinfo_sys, NULL))
-		len = snprintf(buf, len, "Device busy\n");
-	else
-		len = snprintf(buf, len, "OK\n");
-
-	return len;
-}
-static DEVICE_ATTR_RW(slp_info);
 
 static long wcn_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 {
@@ -620,15 +442,10 @@ static const struct file_operations wcn_misc_fops = {
 };
 
 static struct attribute *wcn_attrs[] = {
-	&dev_attr_sleep_state.attr,
 	&dev_attr_sw_ver.attr,
 	&dev_attr_hw_ver.attr,
-	&dev_attr_watchdog_state.attr,
 	&dev_attr_armlog_status.attr,
 	&dev_attr_loglevel.attr,
-	&dev_attr_atcmd.attr,
-	&dev_attr_shutting_down.attr,
-	&dev_attr_slp_info.attr,
 	NULL,
 };
 
@@ -685,25 +502,20 @@ int init_wcn_sysfs(void)
 {
 	int ret;
 
-	WCN_INFO("%s\n", __func__);
+	WCN_DBG("%s\n", __func__);
 	ret = misc_register(&wcn_misc_device);
-	if (ret)
+	if (ret) {
 		WCN_ERR("wcn misc dev register fail\n");
+		return ret;
+	}
 
 	ret = sysfs_create_group(&wcn_misc_device.this_device->kobj,
 				 &wcn_attribute_group);
 	if (ret) {
 		WCN_ERR("%s failed to create device group.\n",
 			__func__);
-		return -1;
-	}
-
-	ret = sysfs_create_bin_file(&wcn_misc_device.this_device->kobj,
-				    &fwlog_attr);
-	if (ret) {
-		WCN_ERR("%s failed to create bin file.\n",
-			__func__);
-		return -1;
+		misc_deregister(&wcn_misc_device);
+		return ret;
 	}
 
 	init_completion(&sysfs_info.cmd_completion);

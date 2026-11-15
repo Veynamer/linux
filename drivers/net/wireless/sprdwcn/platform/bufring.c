@@ -92,6 +92,9 @@ struct mdbg_ring_t *mdbg_ring_alloc(unsigned long int size)
 		ring->wp = ring->pbuff;
 		ring->end = (char *)(((u_long)ring->pbuff) + (ring->size - 1));
 		ring->p_order_flag = 0;
+		ring->total_written = 0;
+		ring->total_read = 0;
+		ring->total_dropped = 0;
 
 		return ring;
 	} while (0);
@@ -105,21 +108,21 @@ void mdbg_ring_destroy(struct mdbg_ring_t *ring)
 	if (unlikely(ZERO_OR_NULL_PTR(ring)))
 		return;
 
-	WCN_LOG("ring = %p", ring);
-	WCN_LOG("ring->pbuff = %p", ring->pbuff);
+	WCN_DBG("ring = %p", ring);
+	WCN_DBG("ring->pbuff = %p", ring->pbuff);
 	if (ring != NULL) {
 		if (ring->pbuff != NULL) {
-			WCN_LOG("to free ring->pbuff.");
+			WCN_DBG("to free ring->pbuff.");
 			kfree(ring->pbuff);
 			ring->pbuff = NULL;
 		}
 		if (ring->plock != NULL) {
-			WCN_LOG("to free ring->plock.");
+			WCN_DBG("to free ring->plock.");
 			MDBG_RING_LOCK_UNINIT(ring);
 			kfree(ring->plock);
 			ring->plock = NULL;
 		}
-		WCN_LOG("to free ring.");
+		WCN_DBG("to free ring.");
 		kfree(ring);
 		ring = NULL;
 	}
@@ -145,21 +148,21 @@ int mdbg_ring_read(struct mdbg_ring_t *ring, void *buf, int len)
 				  (unsigned int)cont_len);
 	pstart = mdbg_ring_start(ring);
 	pend = mdbg_ring_end(ring);
-	WCN_LOG("read_len=%d", read_len);
-	WCN_LOG("buf=%p", buf);
-	WCN_LOG("pstart=%p", pstart);
-	WCN_LOG("pend=%p", pend);
-	WCN_LOG("ring->wp = %p", ring->wp);
-	WCN_LOG("ring->rp=%p\n", ring->rp);
+	WCN_DBG("read_len=%d", read_len);
+	WCN_DBG("buf=%p", buf);
+	WCN_DBG("pstart=%p", pstart);
+	WCN_DBG("pend=%p", pend);
+	WCN_DBG("ring->wp = %p", ring->wp);
+	WCN_DBG("ring->rp=%p\n", ring->rp);
 
 	if ((read_len == 0) || (cont_len == 0)) {
-		WCN_LOG("read_len = 0 OR Ring Empty.");
+		WCN_DBG("read_len = 0 OR Ring Empty.");
 		MDBG_RING_UNLOCK(ring);
 		return 0;	/*ring empty*/
 	}
 
 	if (mdbg_ring_over_loop(ring, read_len, MDBG_RING_R)) {
-		WCN_LOG("Ring loopover.");
+		WCN_DBG("Ring loopover.");
 		len1 = pend - ring->rp + 1;
 		len2 = read_len - len1;
 
@@ -171,7 +174,7 @@ int mdbg_ring_read(struct mdbg_ring_t *ring, void *buf, int len)
 					(void *)ring->rp, len1) ||
 			   copy_to_user((__force void __user *)(buf + len1),
 					(void *)pstart, len2)) {
-			WCN_ERR("copy to user error!\n");
+			WCN_ERR_RL("copy to user error!\n");
 			MDBG_RING_UNLOCK(ring);
 			return -EFAULT;
 		}
@@ -181,7 +184,7 @@ int mdbg_ring_read(struct mdbg_ring_t *ring, void *buf, int len)
 		if (ring->p_order_flag == 0) {
 			if (((ring->rp + read_len) > ring->wp)
 				&& (mdbg_dev->open_count != 0))
-				WCN_ERR("read overlay\n");
+				WCN_ERR_RL("read overlay\n");
 		}
 
 		/* if ((uintptr_t)buf > TASK_SIZE) */
@@ -189,7 +192,7 @@ int mdbg_ring_read(struct mdbg_ring_t *ring, void *buf, int len)
 			memcpy(buf, ring->rp, read_len);
 		else if (copy_to_user((__force void __user *)buf,
 				      (void *)ring->rp, read_len)) {
-			WCN_ERR("copy to user error!\n");
+			WCN_ERR_RL("copy to user error!\n");
 			MDBG_RING_UNLOCK(ring);
 
 			return -EFAULT;
@@ -197,11 +200,12 @@ int mdbg_ring_read(struct mdbg_ring_t *ring, void *buf, int len)
 		ring->rp += read_len;
 	}
 	total_len += read_len;
+	ring->total_read += read_len;
 	wcn_pr_daterate(12, 1, total_len,
 			"%s totallen:%u read:%d wp:%p rp:%p",
 			__func__, total_len, read_len,
 			ring->wp, ring->rp);
-	WCN_LOG("<-----[read end] read len =%d.\n", read_len);
+	WCN_DBG("<-----[read end] read len =%d.\n", read_len);
 	MDBG_RING_UNLOCK(ring);
 
 	return read_len;
@@ -227,7 +231,7 @@ int mdbg_ring_write(struct mdbg_ring_t *ring, void *buf, unsigned int len)
 	char *pend = NULL;
 	static unsigned int total_len;
 
-	WCN_LOG("-->Ring Write len = %d\n", len);
+	WCN_DBG("-->Ring Write len = %d\n", len);
 	if ((ring == NULL) || (buf == NULL) || (len == 0)) {
 		WCN_ERR(
 			"Ring Write Failed,Param Error!,buf=%p,ring=%p,len=%d\n",
@@ -237,27 +241,29 @@ int mdbg_ring_write(struct mdbg_ring_t *ring, void *buf, unsigned int len)
 	}
 	pstart = mdbg_ring_start(ring);
 	pend = mdbg_ring_end(ring);
-	WCN_LOG("pstart = %p", pstart);
-	WCN_LOG("pend = %p", pend);
-	WCN_LOG("buf = %p", buf);
-	WCN_LOG("len = %d", len);
-	WCN_LOG("ring->wp = %p", ring->wp);
-	WCN_LOG("ring->rp=%p", ring->rp);
+	WCN_DBG("pstart = %p", pstart);
+	WCN_DBG("pend = %p", pend);
+	WCN_DBG("buf = %p", buf);
+	WCN_DBG("len = %d", len);
+	WCN_DBG("ring->wp = %p", ring->wp);
+	WCN_DBG("ring->rp=%p", ring->rp);
 
 	/*
 	 * ring buf valid space < len,need to write (buf_space-1)
 	 * and then write len-(buf_space-1)
 	 */
-	if (((mdbg_ring_free_space(ring) - 1) < len)
-		&& (mdbg_dev->open_count != 0)) {
-		WCN_ERR("log buf is full, Discard the package=%d\n", len);
-		wake_up_log_wait();
-		return len;
+	if ((mdbg_ring_free_space(ring) - 1) < len) {
+		ring->total_dropped += len;
+		if (mdbg_dev->open_count != 0) {
+			WCN_ERR_RL("log buf is full, Discard the package=%d\n", len);
+			wake_up_log_wait();
+			return len;
+		}
 	}
 
 	/* ring buf valid space > len, you can write freely */
 	if (mdbg_ring_over_loop(ring, len, MDBG_RING_W)) {
-		WCN_LOG("Ring overloop.");
+		WCN_DBG("Ring overloop.");
 		len1 = pend - ring->wp + 1;
 		len2 = (((int)len - len1) % (int)ring->size);
 
@@ -269,7 +275,7 @@ int mdbg_ring_write(struct mdbg_ring_t *ring, void *buf, unsigned int len)
 					  (__force void __user *)buf, len1) ||
 			    copy_from_user((void *)pstart,
 				(__force void __user *)(buf + len1), len2)) {
-			WCN_ERR("%s copy from user error!\n", __func__);
+			WCN_ERR_RL("%s copy from user error!\n", __func__);
 
 			return -EFAULT;
 		}
@@ -283,16 +289,17 @@ int mdbg_ring_write(struct mdbg_ring_t *ring, void *buf, unsigned int len)
 			memcpy(ring->wp, buf, len);
 		else if (copy_from_user((void *)ring->wp,
 			    (__force void __user *)buf, len)) {
-			WCN_ERR("%s copy from user error!\n", __func__);
+			WCN_ERR_RL("%s copy from user error!\n", __func__);
 			return -EFAULT;
 		}
 		ring->wp += len;
 	}
 	total_len += len;
+	ring->total_written += len;
 	wcn_pr_daterate(12, 1, total_len,
 			"%s totallen:%u write:%u wp:%p rp:%p",
 			__func__, total_len, len, ring->wp, ring->rp);
-	WCN_LOG("<------end len = %d\n", len);
+	WCN_DBG("<------end len = %d\n", len);
 
 	return len;
 #endif
@@ -307,8 +314,8 @@ int mdbg_ring_write_timeout(struct mdbg_ring_t *ring, void *buf,
 	while (cnt > 0 && (mdbg_ring_free_space(ring) - 1) < len) {
 		msleep(20);
 		if (--cnt == 0)
-			WCN_ERR("ringbuf is full, tiemout:%u\n",
-				timeout);
+			WCN_ERR_RL("ringbuf is full, tiemout:%u\n",
+				   timeout);
 	}
 
 	return mdbg_ring_write(ring, buf, len);
@@ -318,7 +325,7 @@ char *mdbg_ring_write_ext(struct mdbg_ring_t *ring, long int len)
 {
 	char *wp = NULL;
 
-	WCN_LOG("ring=%p,ring->wp=%p,len=%ld.", ring, ring->wp, len);
+	WCN_DBG("ring=%p,ring->wp=%p,len=%ld.", ring, ring->wp, len);
 
 	if ((ring == NULL) || (len == 0)) {
 		WCN_ERR("Ring Write Ext Failed,Param Error!\n");
@@ -327,7 +334,7 @@ char *mdbg_ring_write_ext(struct mdbg_ring_t *ring, long int len)
 
 	if (mdbg_ring_over_loop(ring, len, MDBG_RING_R)
 			|| mdbg_ring_will_full(ring, len)) {
-		WCN_LOG(
+		WCN_DBG(
 		"Ring Write Ext Failed,Ring State Error!,overloop=%d,full=%d.",
 		mdbg_ring_over_loop(ring, len, MDBG_RING_R),
 		mdbg_ring_will_full(ring, len));
@@ -336,7 +343,7 @@ char *mdbg_ring_write_ext(struct mdbg_ring_t *ring, long int len)
 	MDBG_RING_LOCK(ring);
 	wp = ring->wp;
 	ring->wp += len;
-	WCN_LOG("return wp=%p,ring->wp=%p.", wp, ring->wp);
+	WCN_DBG("return wp=%p,ring->wp=%p.", wp, ring->wp);
 	MDBG_RING_UNLOCK(ring);
 
 	return wp;
@@ -366,6 +373,6 @@ inline void mdbg_ring_reset(struct mdbg_ring_t *ring)
 
 inline void mdbg_ring_print(struct mdbg_ring_t *ring)
 {
-	WCN_DEBUG("ring buf status:ring->rp=%p,ring->wp=%p.\n",
+	WCN_DBG("ring buf status:ring->rp=%p,ring->wp=%p.\n",
 				ring->rp, ring->wp);
 }

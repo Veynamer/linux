@@ -85,14 +85,14 @@ static unsigned int mem_pd_spinlock_lock(int id)
 		i++;
 		ret = sprdwcn_bus_reg_read(SPINLOCKSTS(id), &reg_val, 4);
 		if (!(ret == 0)) {
-			WCN_INFO("sdiohal_dt_read lock error !\n");
+			WCN_ERR_RL("sdiohal_dt_read lock error !\n");
 			return ret;
 		}
 		if (reg_val == 0)
 			break;
 		if (i > 200) {
 			i = 0;
-			WCN_INFO("get spinlock time out\n");
+			WCN_ERR_RL("get spinlock time out\n");
 		}
 	} while (i);
 
@@ -106,7 +106,7 @@ static unsigned int mem_pd_spinlock_unlock(int id)
 
 	ret = sprdwcn_bus_reg_write(SPINLOCKSTS(id),  &reg_val, 4);
 	if (!(ret == 0)) {
-		WCN_INFO("dt_write lock error !\n");
+		WCN_ERR_RL("dt_write lock error !\n");
 		return ret;
 	}
 
@@ -125,7 +125,7 @@ static int mem_pd_power_switch(enum wcn_sub_sys subsys, int val)
 	struct wcn_match_data *g_match_config = get_wcn_match_config();
 
 	/* unsigned int mem_pd_power_delay; */
-	WCN_INFO("%s\n", __func__);
+	WCN_DBG("%s\n", __func__);
 	/* get the lock to write the register, use spinlock id=0 */
 	mem_pd_spinlock_lock(0);
 	/* CP reset write 1, mask mem CGG reg */
@@ -135,7 +135,7 @@ static int mem_pd_power_switch(enum wcn_sub_sys subsys, int val)
 		if (val) {
 			if (mem_pd.wifi_state == THREAD_DELETE) {
 				mem_pd_spinlock_unlock(0);
-				WCN_INFO("wifi_state=0, forbid on\n");
+				WCN_DBG("wifi_state=0, forbid on\n");
 				return ret;
 			}
 			/* wifi iram mem pd range */
@@ -143,7 +143,7 @@ static int mem_pd_power_switch(enum wcn_sub_sys subsys, int val)
 			ret = sprdwcn_bus_reg_read(wif_bt_mem_cfg, &reg_val, 4);
 			if (!(ret == 0)) {
 				mem_pd_spinlock_unlock(0);
-				WCN_INFO("sdiohal_dt_read error !\n");
+				WCN_ERR_RL("sdiohal_dt_read error !\n");
 				return ret;
 			}
 			if (reg_val & mem_info_cp.wifi_iram_mask) {
@@ -154,11 +154,11 @@ static int mem_pd_power_switch(enum wcn_sub_sys subsys, int val)
 				wif_bt_mem_cfg, &reg_val, 4);
 				if (!(ret == 0)) {
 					mem_pd_spinlock_unlock(0);
-					WCN_INFO("dt_write error !\n");
+					WCN_ERR_RL("dt_write error !\n");
 					return ret;
 				}
 			}
-			WCN_INFO("wifi irammem power on\n");
+			WCN_DBG("wifi irammem power on\n");
 			/* wifi dram mem pd range */
 			if (g_match_config && g_match_config->unisoc_wcn_m3lite)
 				wif_bt_mem_cfg = REG_AON_APB_BTWF_MEM_CGG2;
@@ -168,7 +168,7 @@ static int mem_pd_power_switch(enum wcn_sub_sys subsys, int val)
 			ret = sprdwcn_bus_reg_read(wif_bt_mem_cfg, &reg_val, 4);
 			if (!(ret == 0)) {
 				mem_pd_spinlock_unlock(0);
-				WCN_INFO("sdiohal_dt_read error !\n");
+				WCN_ERR_RL("sdiohal_dt_read error !\n");
 				return ret;
 			}
 			if (reg_val & mem_info_cp.wifi_dram_mask) {
@@ -179,15 +179,15 @@ static int mem_pd_power_switch(enum wcn_sub_sys subsys, int val)
 				wif_bt_mem_cfg, &reg_val, 4);
 				if (!(ret == 0)) {
 					mem_pd_spinlock_unlock(0);
-					WCN_INFO("dt_write error !\n");
+					WCN_ERR_RL("dt_write error !\n");
 					return ret;
 				}
 			}
-			WCN_INFO("wifi drammem power on\n");
+			WCN_DBG("wifi drammem power on\n");
 		} else {
 			if (mem_pd.wifi_state == THREAD_CREATE) {
 				mem_pd_spinlock_unlock(0);
-				WCN_INFO("wifi_state=1, forbid off\n");
+				WCN_DBG("wifi_state=1, forbid off\n");
 				return ret;
 			}
 			/* wifi iram mem pd range */
@@ -195,7 +195,7 @@ static int mem_pd_power_switch(enum wcn_sub_sys subsys, int val)
 			ret = sprdwcn_bus_reg_read(wif_bt_mem_cfg, &reg_val, 4);
 			if (!(ret == 0)) {
 				mem_pd_spinlock_unlock(0);
-				WCN_INFO("dt read error !\n");
+				WCN_ERR_RL("dt read error !\n");
 				return ret;
 			}
 			if (!(reg_val & mem_info_cp.wifi_iram_mask)) {
@@ -205,11 +205,11 @@ static int mem_pd_power_switch(enum wcn_sub_sys subsys, int val)
 				wif_bt_mem_cfg, &reg_val, 4);
 				if (!(ret == 0)) {
 					mem_pd_spinlock_unlock(0);
-					WCN_INFO("dt write error !\n");
+					WCN_ERR_RL("dt write error !\n");
 					return ret;
 				}
 			}
-			WCN_INFO("wifi irammem power down\n");
+			WCN_DBG("wifi irammem power down\n");
 			/* wifi dram mem pd range */
 			if (g_match_config && g_match_config->unisoc_wcn_m3lite)
 				wif_bt_mem_cfg = REG_AON_APB_BTWF_MEM_CGG2;
@@ -219,7 +219,7 @@ static int mem_pd_power_switch(enum wcn_sub_sys subsys, int val)
 			ret = sprdwcn_bus_reg_read(wif_bt_mem_cfg, &reg_val, 4);
 			if (!(ret == 0)) {
 				mem_pd_spinlock_unlock(0);
-				WCN_INFO("sdio read error !\n");
+				WCN_ERR_RL("sdio read error !\n");
 				return ret;
 			}
 			if (!(reg_val & mem_info_cp.wifi_dram_mask)) {
@@ -229,18 +229,18 @@ static int mem_pd_power_switch(enum wcn_sub_sys subsys, int val)
 					wif_bt_mem_cfg, &reg_val, 4);
 				if (!(ret == 0)) {
 					mem_pd_spinlock_unlock(0);
-					WCN_INFO("dt write error !\n");
+					WCN_ERR_RL("dt write error !\n");
 					return ret;
 				}
 			}
-			WCN_INFO("wifi drammem power down\n");
+			WCN_DBG("wifi drammem power down\n");
 		}
 	break;
 	case MARLIN_BLUETOOTH:
 		if (val) {
 			if (mem_pd.bt_state == THREAD_DELETE) {
 				mem_pd_spinlock_unlock(0);
-				WCN_INFO("bt_state=0, forbid on\n");
+				WCN_DBG("bt_state=0, forbid on\n");
 				return ret;
 			}
 			/* bt iram mem pd range */
@@ -255,7 +255,7 @@ static int mem_pd_power_switch(enum wcn_sub_sys subsys, int val)
 			ret = sprdwcn_bus_reg_read(wif_bt_mem_cfg, &reg_val, 4);
 			if (!(ret == 0)) {
 				mem_pd_spinlock_unlock(0);
-				WCN_INFO("sdio dt read error !\n");
+				WCN_ERR_RL("sdio dt read error !\n");
 				return ret;
 			}
 			if (reg_val & bt_ram_mask) {
@@ -266,15 +266,15 @@ static int mem_pd_power_switch(enum wcn_sub_sys subsys, int val)
 					wif_bt_mem_cfg, &reg_val, 4);
 				if (!(ret == 0)) {
 					mem_pd_spinlock_unlock(0);
-					WCN_INFO("error !\n");
+					WCN_ERR_RL("error !\n");
 					return ret;
 				}
 			}
-			WCN_INFO("bt irampower on\n");
+			WCN_DBG("bt irampower on\n");
 		} else {
 			if (mem_pd.bt_state == THREAD_CREATE) {
 				mem_pd_spinlock_unlock(0);
-				WCN_INFO("bt_state=1, forbid off\n");
+				WCN_DBG("bt_state=1, forbid off\n");
 				return ret;
 			}
 			/* bt iram mem pd range */
@@ -289,12 +289,12 @@ static int mem_pd_power_switch(enum wcn_sub_sys subsys, int val)
 			ret = sprdwcn_bus_reg_read(wif_bt_mem_cfg, &reg_val, 4);
 			if (!(ret == 0)) {
 				mem_pd_spinlock_unlock(0);
-				WCN_INFO("error !\n");
+				WCN_ERR_RL("error !\n");
 				return ret;
 			}
 			if (reg_val & bt_ram_mask) {
 				/* val =1 ,powerdown */
-				WCN_INFO("mem reg val =1 !\n");
+				WCN_DBG("mem reg val =1 !\n");
 			} else {
 				reg_val |= bt_ram_mask;
 				/* clear bit_start ,mem power on */
@@ -302,11 +302,11 @@ static int mem_pd_power_switch(enum wcn_sub_sys subsys, int val)
 				wif_bt_mem_cfg, &reg_val, 4);
 				if (!(ret == 0)) {
 					mem_pd_spinlock_unlock(0);
-					WCN_INFO("error !\n");
+					WCN_ERR_RL("error !\n");
 					return ret;
 				}
 			}
-			WCN_INFO("bt iram power down\n");
+			WCN_DBG("bt iram power down\n");
 		}
 	break;
 	default:
@@ -320,49 +320,49 @@ static int mem_pd_power_switch(enum wcn_sub_sys subsys, int val)
 int inform_cp_wifi_download(void)
 {
 	sdio_ap_int_cp0(WIFI_BIN_DOWNLOAD);
-	WCN_INFO("%s\n", __func__);
+	WCN_DBG("%s\n", __func__);
 
 	return 0;
 }
 static int inform_cp_bt_download(void)
 {
 	sdio_ap_int_cp0(BT_BIN_DOWNLOAD);
-	WCN_INFO("%s\n", __func__);
+	WCN_DBG("%s\n", __func__);
 
 	return 0;
 }
 
 static void wifi_cp_open(void)
 {
-	WCN_INFO("wifi_open int from cp\n");
+	WCN_DBG("wifi_open int from cp\n");
 	complete(&(mem_pd.wifi_open_completion));
 }
 static void wifi_cp_close(void)
 {
 	complete(&(mem_pd.wifi_cls_cpl));
-	WCN_INFO("wifi_thread_delete int\n");
+	WCN_DBG("wifi_thread_delete int\n");
 }
 
 static void bt_cp_open(void)
 {
-	WCN_INFO("bt_open int from cp\n");
+	WCN_DBG("bt_open int from cp\n");
 	complete(&(mem_pd.bt_open_completion));
 }
 static void bt_cp_close(void)
 {
 	complete(&(mem_pd.bt_close_completion));
-	WCN_INFO("bt_thread_delete int\n");
+	WCN_DBG("bt_thread_delete int\n");
 }
 static void save_bin_cp_ready(void)
 {
 	if (mem_pd.cp_mem_all_off == 0) {
 		complete(&(mem_pd.save_bin_completion));
-		WCN_INFO("%s ,cp while(1) state\n", __func__);
+		WCN_DBG("%s ,cp while(1) state\n", __func__);
 		mem_pd.cp_mem_all_off = 1;
 		mem_pd.cp_version = 0;
 		return;
 	}
-	WCN_INFO("%s ,wifi/bt power down, wait event\n", __func__);
+	WCN_DBG("%s ,wifi/bt power down, wait event\n", __func__);
 }
 static int mem_pd_pub_int_RegCb(void)
 {
@@ -379,7 +379,7 @@ static int sdio_read_mem_from_cp(void)
 {
 	int err = 0;
 
-	WCN_INFO("%s  read wifi/bt mem bin\n", __func__);
+	WCN_DBG("%s  read wifi/bt mem bin\n", __func__);
 	err = sprdwcn_bus_direct_read(mem_info_cp.wifi_begin_addr,
 				      mem_pd.wifi_mem, mem_info_cp.wifi_size);
 	if (err < 0) {
@@ -392,14 +392,14 @@ static int sdio_read_mem_from_cp(void)
 		pr_err("%s bt save mem bin error:%d", __func__, err);
 		return err;
 	}
-	WCN_INFO("%s save wifi/bt mem bin ok\n", __func__);
+	WCN_DBG("%s save wifi/bt mem bin ok\n", __func__);
 
 	return 0;
 }
 static int sdio_ap_int_cp_save_cp_mem(void)
 {
 	sdio_ap_int_cp0(SAVE_CP_MEM);
-	WCN_INFO("%s, cp while(1) break\n", __func__);
+	WCN_DBG("%s, cp while(1) break\n", __func__);
 
 	return 0;
 }
@@ -460,20 +460,20 @@ static int mem_pd_read_add_from_cp(void)
 
 	mem_pd.wifi_mem = kmalloc(mem_info_cp.wifi_size, GFP_KERNEL);
 	if (!mem_pd.wifi_mem) {
-		WCN_INFO("mem pd wifi save buff malloc Failed.\n");
+		WCN_ERR("mem pd wifi save buff malloc Failed.\n");
 		return MEM_PD_ERR;
 	}
 	mem_pd.bt_mem = kmalloc(mem_info_cp.bt_size, GFP_KERNEL);
 	if (!mem_pd.bt_mem) {
 		kfree(mem_pd.wifi_mem);
-		WCN_INFO("mem pd bt save buff malloc Failed.\n");
+		WCN_ERR("mem pd bt save buff malloc Failed.\n");
 		return MEM_PD_ERR;
 	}
 	mem_pd.wifi_clear = kmalloc(mem_info_cp.wifi_size, GFP_KERNEL);
 	if (!mem_pd.wifi_clear) {
 		kfree(mem_pd.wifi_mem);
 		kfree(mem_pd.bt_mem);
-		WCN_INFO("mem pd clear buff malloc Failed.\n");
+		WCN_ERR("mem pd clear buff malloc Failed.\n");
 		return MEM_PD_ERR;
 	}
 	mem_pd.bt_clear = kmalloc(mem_info_cp.bt_size, GFP_KERNEL);
@@ -481,7 +481,7 @@ static int mem_pd_read_add_from_cp(void)
 		kfree(mem_pd.wifi_mem);
 		kfree(mem_pd.bt_mem);
 		kfree(mem_pd.wifi_clear);
-		WCN_INFO("mem pd clear buff malloc Failed.\n");
+		WCN_ERR("mem pd clear buff malloc Failed.\n");
 		return MEM_PD_ERR;
 	}
 	memset(mem_pd.wifi_clear, 0x0, mem_info_cp.wifi_size);
@@ -493,27 +493,27 @@ static int mem_pd_read_add_from_cp(void)
 int mem_pd_save_bin(void)
 {
 	/* mutex_lock(&(mem_pd.mem_pd_lock)); */
-	WCN_INFO("%s entry\n", __func__);
+	WCN_DBG("%s entry\n", __func__);
 	if (wait_for_completion_timeout(
 		&(mem_pd.save_bin_completion),
 		msecs_to_jiffies(CP_NO_MEM_PD_TIMEROUT)) <= 0) {
-		WCN_INFO("cp version is wcn_trunk ,cp_version =1\n");
+		WCN_DBG("cp version is wcn_trunk ,cp_version =1\n");
 		/* mutex_unlock(&(mem_pd.mem_pd_lock)); */
 		mem_pd.cp_version = 1;
 		return 0;
 	}
 	if (mem_pd.bin_save_done == 0) {
 		mem_pd.bin_save_done = 1;
-		WCN_INFO("cp first power on");
+		WCN_DBG("cp first power on");
 		mem_pd_read_add_from_cp();
 		sdio_read_mem_from_cp();
 		/* save to char[] */
 	} else
-		WCN_INFO("cp not first power on %s do nothing\n",
+		WCN_DBG("cp not first power on %s do nothing\n",
 			 __func__);
 	mem_pd_power_switch(MARLIN_WIFI, FALSE);
 	mem_pd_power_switch(MARLIN_BLUETOOTH, FALSE);
-	WCN_INFO("wifi/bt mem power down\n");
+	WCN_DBG("wifi/bt mem power down\n");
 	sdio_ap_int_cp_save_cp_mem();
 	/* save done , AP inform cp by INT. */
 	/* mutex_unlock(&(mem_pd.mem_pd_lock)); */
@@ -544,19 +544,19 @@ static int mem_pd_download_mem_bin(int subsys)
 	char *mem;
 	unsigned int len = 0;
 
-	WCN_INFO("%s\n", __func__);
+	WCN_DBG("%s\n", __func__);
 	switch (subsys) {
 	case MARLIN_WIFI:
 		addr = mem_info_cp.wifi_begin_addr;
 		mem = mem_pd.wifi_mem;
 		len = mem_info_cp.wifi_size;
-		WCN_INFO("%s, wifi mem download ok\n", __func__);
+		WCN_DBG("%s, wifi mem download ok\n", __func__);
 	break;
 	case MARLIN_BLUETOOTH:
 		addr = mem_info_cp.bt_begin_addr;
 		mem = mem_pd.bt_mem;
 		len = mem_info_cp.bt_size;
-		WCN_INFO("%s, bt mem download ok\n", __func__);
+		WCN_DBG("%s, bt mem download ok\n", __func__);
 	break;
 	default:
 		return MEM_PD_ERR;
@@ -573,19 +573,19 @@ int mem_pd_mgr(enum wcn_sub_sys subsys, int val)
 {
 	if (mem_pd.cp_version)
 		return 0;
-	WCN_INFO("%s mem on/off\n", __func__);
+	WCN_DBG("%s mem on/off\n", __func__);
 	if ((subsys != MARLIN_WIFI) && (subsys != MARLIN_BLUETOOTH)) {
-		WCN_INFO("subsys:%d, do nothing, return ok\n", subsys);
+		WCN_DBG("subsys:%d, do nothing, return ok\n", subsys);
 		return 0;
 	}
 	mutex_lock(&(mem_pd.mem_pd_lock));
 	switch (subsys) {
 	case MARLIN_WIFI:
-		WCN_INFO("marlin wifi state:%d, subsys %d power %d\n",
+		WCN_DBG("marlin wifi state:%d, subsys %d power %d\n",
 			 mem_pd.wifi_state, subsys, val);
 		if (val) {
 			if (mem_pd.wifi_state != THREAD_DELETE) {
-				WCN_INFO("wifi opened ,do nothing\n");
+				WCN_DBG("wifi opened ,do nothing\n");
 				goto out;
 			}
 			mem_pd.wifi_state = THREAD_CREATE;
@@ -598,13 +598,13 @@ int mem_pd_mgr(enum wcn_sub_sys subsys, int val)
 				&(mem_pd.wifi_open_completion),
 			msecs_to_jiffies(CP_TIMEROUT))
 			<= 0) {
-				WCN_INFO("wifi creat fail\n");
+				WCN_ERR("wifi creat fail\n");
 				goto mem_pd_err;
 			}
-			WCN_INFO("cp wifi creat thread ok\n");
+			WCN_DBG("cp wifi creat thread ok\n");
 		} else {
 			if (mem_pd.wifi_state != THREAD_CREATE) {
-				WCN_INFO("wifi closed ,do nothing\n");
+				WCN_DBG("wifi closed ,do nothing\n");
 				goto out;
 			}
 			/* avoid fake interrupt , and reinit */
@@ -614,20 +614,20 @@ int mem_pd_mgr(enum wcn_sub_sys subsys, int val)
 			if (wait_for_completion_timeout(&(mem_pd.wifi_cls_cpl),
 						msecs_to_jiffies(CP_TIMEROUT))
 			<= 0) {
-				WCN_INFO("wifi delete fail\n");
+				WCN_ERR("wifi delete fail\n");
 				goto mem_pd_err;
 			}
 			mem_pd.wifi_state = THREAD_DELETE;
 			mem_pd_power_switch(subsys, val);
-			WCN_INFO("cp wifi delete thread ok\n");
+			WCN_DBG("cp wifi delete thread ok\n");
 		}
 		break;
 	case MARLIN_BLUETOOTH:
-		WCN_INFO("marlin bt state:%d, subsys %d power %d\n",
+		WCN_DBG("marlin bt state:%d, subsys %d power %d\n",
 			 mem_pd.bt_state, subsys, val);
 		if (val) {
 			if (mem_pd.bt_state != THREAD_DELETE) {
-				WCN_INFO("bt opened ,do nothing\n");
+				WCN_DBG("bt opened ,do nothing\n");
 				goto out;
 			}
 			mem_pd.bt_state = THREAD_CREATE;
@@ -638,29 +638,29 @@ int mem_pd_mgr(enum wcn_sub_sys subsys, int val)
 			ap_int_cp_wifi_bin_done(subsys);
 		if (wait_for_completion_timeout(&(mem_pd.bt_open_completion),
 			msecs_to_jiffies(CP_TIMEROUT)) <= 0) {
-			WCN_INFO("cp bt creat thread fail\n");
+			WCN_ERR("cp bt creat thread fail\n");
 			goto mem_pd_err;
 		}
-			WCN_INFO("cp bt creat thread ok\n");
+			WCN_DBG("cp bt creat thread ok\n");
 		} else {
 			if (mem_pd.bt_state != THREAD_CREATE) {
-				WCN_INFO("bt closed ,do nothing\n");
+				WCN_DBG("bt closed ,do nothing\n");
 				goto out;
 			}
 			if (wait_for_completion_timeout(
 				&(mem_pd.bt_close_completion),
 			msecs_to_jiffies(CP_TIMEROUT))
 				<= 0) {
-				WCN_INFO("bt delete fail\n");
+				WCN_ERR("bt delete fail\n");
 				goto mem_pd_err;
 			}
 			mem_pd.bt_state = THREAD_DELETE;
 			mem_pd_power_switch(subsys, val);
-			WCN_INFO("cp bt delete thread ok\n");
+			WCN_DBG("cp bt delete thread ok\n");
 		}
 		break;
 	default:
-		WCN_INFO("%s switch default\n", __func__);
+		WCN_WARN_RL("%s switch default\n", __func__);
 	}
 
 out:
@@ -678,7 +678,7 @@ int mem_pd_poweroff_deinit(void)
 {
 	if (mem_pd.cp_version)
 		return 0;
-	WCN_INFO("mem_pd_chip_poweroff_deinit\n");
+	WCN_DBG("mem_pd_chip_poweroff_deinit\n");
 	mem_pd.wifi_state = 0;
 	mem_pd.bt_state = 0;
 	mem_pd.cp_version = 0;
@@ -693,7 +693,7 @@ int mem_pd_poweroff_deinit(void)
 }
 int mem_pd_init(void)
 {
-	WCN_INFO("%s enter\n", __func__);
+	WCN_DBG("%s enter\n", __func__);
 	mutex_init(&(mem_pd.mem_pd_lock));
 	init_completion(&(mem_pd.wifi_open_completion));
 	init_completion(&(mem_pd.wifi_cls_cpl));
@@ -706,14 +706,14 @@ int mem_pd_init(void)
 	/* mem_pd.cp_version = 0; */
 	/* mem_pd.cp_mem_all_off = 0; */
 
-	WCN_INFO("%s ok!\n", __func__);
+	WCN_DBG("%s ok!\n", __func__);
 
 	return 0;
 }
 
 int mem_pd_exit(void)
 {
-	WCN_INFO("%s enter\n", __func__);
+	WCN_DBG("%s enter\n", __func__);
 	/* atomic_set(&(slp_mgr.cp2_state), STAY_SLPING); */
 	/* sleep_active_modules = 0; */
 	/* wake_cnt = 0; */
@@ -727,7 +727,7 @@ int mem_pd_exit(void)
 	kfree(mem_pd.bt_clear);
 	mem_pd.wifi_clear = NULL;
 	mem_pd.bt_clear = NULL;
-	WCN_INFO("%s ok!\n", __func__);
+	WCN_DBG("%s ok!\n", __func__);
 
 	return 0;
 }

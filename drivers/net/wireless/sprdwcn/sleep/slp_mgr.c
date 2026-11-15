@@ -99,7 +99,7 @@ int slp_mgr_wakeup(enum slp_subsys subsys)
 try_timeout:
 			if (do_dump) {
 				atomic_set(&(slp_mgr.cp2_state), STAY_AWAKING);
-				WCN_INFO("wakeup fail, slp_sts-0x%x\n",
+				WCN_DBG("wakeup fail, slp_sts-0x%x\n",
 					 slp_sts);
 				sdiohal_dump_aon_reg();
 				mutex_unlock(&(slp_mgr.wakeup_lock));
@@ -126,7 +126,7 @@ void slp_mgr_reset(void)
 
 int slp_mgr_init(void)
 {
-	WCN_INFO("%s enter\n", __func__);
+	WCN_DBG("%s enter\n", __func__);
 
 	atomic_set(&(slp_mgr.cp2_state), STAY_AWAKING);
 	mutex_init(&(slp_mgr.drv_slp_lock));
@@ -137,7 +137,7 @@ int slp_mgr_init(void)
 	slp_test_init();
 #endif
 
-	WCN_INFO("%s ok!\n", __func__);
+	WCN_DBG("%s ok!\n", __func__);
 
 	return 0;
 }
@@ -145,12 +145,12 @@ EXPORT_SYMBOL(slp_mgr_init);
 
 int slp_mgr_deinit(void)
 {
-	WCN_INFO("%s enter\n", __func__);
+	WCN_DBG("%s enter\n", __func__);
 	atomic_set(&(slp_mgr.cp2_state), STAY_SLPING);
 	slp_mgr.active_module = 0;
 	mutex_destroy(&(slp_mgr.drv_slp_lock));
 	mutex_destroy(&(slp_mgr.wakeup_lock));
-	WCN_INFO("%s ok!\n", __func__);
+	WCN_DBG("%s ok!\n", __func__);
 
 	return 0;
 }
@@ -159,7 +159,7 @@ EXPORT_SYMBOL(slp_mgr_deinit);
 
 int slp_mgr_death(void)
 {
-	WCN_INFO("%s enter\n", __func__);
+	WCN_DBG("%s enter\n", __func__);
 	atomic_set(&(slp_mgr.cp2_state), STAY_DEATH);
 	return 0;
 }

@@ -92,7 +92,7 @@ static int load_fstab_conf(const char *p_path, char *wcn_path)
 
 	match_flag = false;
 	p = line;
-	WCN_INFO("Attempt to load conf from %s\n", p_path);
+	WCN_DBG("Attempt to load conf from %s\n", p_path);
 #if 0
 	p_file = filp_open(p_path, O_RDONLY, 0);
 #endif
@@ -150,7 +150,7 @@ static int find_callback(struct dir_context *ctx, const char *name, int namlen,
 	if (tmp == 0) {
 		if (sizeof(fstab_name) > strlen(fstab_name) + strlen(name) + 2)
 			strcat(fstab_name, name);
-		WCN_INFO("full fstab name %s\n", fstab_name);
+		WCN_DBG("full fstab name %s\n", fstab_name);
 	}
 
 	return 0;
@@ -165,16 +165,16 @@ int parse_firmware_path(char *firmware_path)
 {
 	u32 ret = 0;
 
-	WCN_INFO("%s entry\n", __func__);
+	WCN_DBG("%s entry\n", __func__);
 	ret = -1;
 #if 0
 	u32 loop;
 	struct file *file1;
 
-	WCN_INFO("%s entry\n", __func__);
+	WCN_DBG("%s entry\n", __func__);
 	for (loop = 0; loop < FSTAB_PATH_NUM; loop++) {
 		file1 = NULL;
-		WCN_DEBUG("dir:%s: loop:%d\n", fstab_dir[loop], loop);
+		WCN_DBG("dir:%s: loop:%d\n", fstab_dir[loop], loop);
 #if 0
 		file1 = filp_open(fstab_dir[loop], O_DIRECTORY, 0);
 #endif
@@ -196,16 +196,16 @@ int parse_firmware_path(char *firmware_path)
 		}
 		fput(file1);
 		ret = load_fstab_conf(fstab_name, firmware_path);
-		WCN_INFO("%s:load conf ret %d\n", fstab_dir[loop], ret);
+		WCN_DBG("%s:load conf ret %d\n", fstab_dir[loop], ret);
 		if (!ret) {
-			WCN_INFO("[%s]:%s\n", fstab_name, firmware_path);
+			WCN_DBG("[%s]:%s\n", fstab_name, firmware_path);
 			return 0;
 		}
 	}
 	/* for yunos */
 	ret = load_fstab_conf(ETC_FSTAB, firmware_path);
 	if (!ret) {
-		WCN_INFO(ETC_FSTAB":%s !\n", firmware_path);
+		WCN_DBG(ETC_FSTAB":%s !\n", firmware_path);
 		return 0;
 	}
 #endif

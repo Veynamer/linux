@@ -35,20 +35,23 @@
 #include <linux/spinlock.h>
 #include <misc/wcn_bus.h>
 #include "sprd_wcn.h"
+#include "wcn_dbg.h"
 #include "../platform/wcn_boot.h"
+
+struct device *wcn_dev;
 
 #ifdef CONFIG_PM_SLEEP
 static int wcn_resume(struct device *dev)
 {
 	/* External SDIO Marlin3 has no SIPC channels to power-notify. */
-	pr_info("sprd_wcn: %s enter\n", __func__);
+	pr_debug("sprd_wcn: %s enter\n", __func__);
 	return 0;
 }
 
 static int wcn_suspend(struct device *dev)
 {
 	/* External SDIO Marlin3 has no SIPC channels to power-notify. */
-	pr_info("sprd_wcn: %s enter\n", __func__);
+	pr_debug("sprd_wcn: %s enter\n", __func__);
 	return 0;
 }
 #endif /* CONFIG_PM_SLEEP */
@@ -125,6 +128,7 @@ static int sprd_wcn_probe(struct platform_device *pdev)
 	struct device_node *np = pdev->dev.of_node;
 	const struct of_device_id *of_id =
 		of_match_node(wcn_global_match_table, np);
+	int ret;
 
 	if (!of_id) {
 		pr_info("%s not find matched id!", __func__);
@@ -138,8 +142,13 @@ static int sprd_wcn_probe(struct platform_device *pdev)
 	}
 
 	g_match_data = p_match_data;
-	pr_info("wcn out probe \n");
-	return marlin_probe(pdev);
+	wcn_dev = &pdev->dev;
+	pr_debug("wcn out probe\n");
+	ret = marlin_probe(pdev);
+	if (ret)
+		wcn_dev = NULL;
+
+	return ret;
 }
 
 static void sprd_wcn_remove(struct platform_device *pdev)
@@ -161,6 +170,7 @@ static void sprd_wcn_remove(struct platform_device *pdev)
 	}
 
 	marlin_remove(pdev);
+	wcn_dev = NULL;
 }
 
 static void sprd_wcn_shutdown(struct platform_device *pdev)
@@ -197,7 +207,7 @@ static struct platform_driver sprd_wcn_driver = {
 
 static int __init sprd_wcn_init(void)
 {
-	pr_info("%s entry!\n", __func__);
+	pr_debug("%s entry!\n", __func__);
 	return platform_driver_register(&sprd_wcn_driver);
 }
 

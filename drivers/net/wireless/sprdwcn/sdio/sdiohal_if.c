@@ -65,7 +65,7 @@ static int sdio_chn_deinit(struct mchn_ops_t *ops)
 		}
 		/* rm invalid mbuf in data_list_tx */
 		if (p_data->data_list_tx == NULL)
-			pr_info("p_data->data_list_tx is NULL \n");
+			pr_debug("p_data->data_list_tx is NULL\n");
 		else if (p_data->data_list_tx->mbuf_head && p_data->data_list_tx->node_num)
 			sdiohal_remove_datalist_invalid_data(ops, p_data->data_list_tx);
 		sprd_wlan_power_status_sync(1, 1);

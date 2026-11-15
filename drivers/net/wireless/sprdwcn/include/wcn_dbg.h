@@ -1,44 +1,60 @@
 #ifndef __WCN_DBG_H__
 #define __WCN_DBG_H__
 
+#include <linux/device.h>
+#include <linux/kernel.h>
+
 #ifdef pr_fmt
 #undef pr_fmt
 #endif
 
-#define MDBG_DEBUG_MODE 0
-#define WCN_DEBUG_ON 1
-#define WCN_DEBUG_OFF 0
+#define pr_fmt(fmt) "wcn: " fmt
 
-extern u32 wcn_print_level;
+extern struct device *wcn_dev;
 
-#define pr_fmt(fmt) "WCN BASE: " fmt
-
-#define WCN_INFO(fmt, args...)\
-	pr_info(fmt, ## args)
-
-#define WCN_ERR(fmt, args...)\
-	pr_err("error: " fmt, ## args)
-
-#define WCN_DBG(fmt, args...)\
-	pr_debug("dbg: " fmt, ## args)
-
-#define WCN_WARN(fmt, args...)\
-	pr_warn("warning: " fmt, ## args)
-
-#define WCN_DEBUG(fmt, args...) do { \
-	if (wcn_print_level ==  WCN_DEBUG_ON)\
-		pr_info("debug: " fmt, ## args);\
+#define WCN_INFO(fmt, args...) do { \
+	if (wcn_dev) \
+		dev_info(wcn_dev, fmt, ## args); \
+	else \
+		pr_info(fmt, ## args); \
 } while (0)
 
-#if MDBG_DEBUG_MODE
-#define WCN_LOG(fmt, args...)\
-	pr_err(" dbg_err: %s  %d:" fmt \
-	       "\n", __func__, __LINE__, ## args)
-#else
-#define WCN_LOG(fmt, args...)
-#endif
+#define WCN_ERR(fmt, args...) do { \
+	if (wcn_dev) \
+		dev_err(wcn_dev, fmt, ## args); \
+	else \
+		pr_err(fmt, ## args); \
+} while (0)
 
-#define MDBG_FUNC_ENTERY        WCN_LOG("ENTER.")
-#define MDBG_FUNC_EXIT          WCN_LOG("EXIT.")
+#define WCN_WARN(fmt, args...) do { \
+	if (wcn_dev) \
+		dev_warn(wcn_dev, fmt, ## args); \
+	else \
+		pr_warn(fmt, ## args); \
+} while (0)
+
+#define WCN_DBG(fmt, args...) do { \
+	if (wcn_dev) \
+		dev_dbg(wcn_dev, fmt, ## args); \
+	else \
+		pr_debug(fmt, ## args); \
+} while (0)
+
+#define WCN_ERR_RL(fmt, args...) do { \
+	if (wcn_dev) \
+		dev_err_ratelimited(wcn_dev, fmt, ## args); \
+	else \
+		printk_ratelimited(KERN_ERR pr_fmt(fmt), ## args); \
+} while (0)
+
+#define WCN_WARN_RL(fmt, args...) do { \
+	if (wcn_dev) \
+		dev_warn_ratelimited(wcn_dev, fmt, ## args); \
+	else \
+		printk_ratelimited(KERN_WARNING pr_fmt(fmt), ## args); \
+} while (0)
+
+#define MDBG_FUNC_ENTERY		WCN_DBG("ENTER")
+#define MDBG_FUNC_EXIT			WCN_DBG("EXIT")
 
 #endif

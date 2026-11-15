@@ -58,13 +58,13 @@ static void sdiohal_abort(void)
 
 	sdio_claim_host(p_data->sdio_func[FUNC_0]);
 	val = sdio_readb(p_data->sdio_func[FUNC_0], 0x0, &err);
-	pr_info("before abort, SDIO_VER_CCCR:0x%x\n", val);
+	pr_debug("before abort, SDIO_VER_CCCR:0x%x\n", val);
 
 	sdio_writeb(p_data->sdio_func[FUNC_0], VAL_ABORT_TRANS,
 		    SDIOHAL_CCCR_ABORT, &err);
 
 	val = sdio_readb(p_data->sdio_func[FUNC_0], 0x0, &err);
-	pr_info("after abort, SDIO_VER_CCCR:0x%x\n", val);
+	pr_debug("after abort, SDIO_VER_CCCR:0x%x\n", val);
 	sdio_release_host(p_data->sdio_func[FUNC_0]);
 }
 
@@ -91,7 +91,7 @@ static void sdiohal_success_trans_pac_num(void)
 				  (stbba2 << 16) | (stbba3 << 24);
 	sdio_release_host(p_data->sdio_func[FUNC_0]);
 
-	pr_info("success num:[%d]\n", p_data->success_pac_num);
+	pr_debug("success num:[%d]\n", p_data->success_pac_num);
 }
 
 unsigned int sdiohal_get_trans_pac_num(void)
@@ -106,7 +106,7 @@ int sdiohal_sdio_pt_write(unsigned char *src, unsigned int datalen)
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
 	int ret;
 	struct timespec64 tm_begin, tm_end;
-	static long time_total_ns;
+	static long time_total_ns __maybe_unused;
 	static int times_count;
 
 	ktime_get_real_ts64(&tm_begin);
@@ -152,7 +152,7 @@ int sdiohal_sdio_pt_read(unsigned char *src, unsigned int datalen)
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
 	int ret;
 	struct timespec64 tm_begin, tm_end;
-	static long time_total_ns;
+	static long time_total_ns __maybe_unused;
 	static int times_count;
 
 	ktime_get_real_ts64(&tm_begin);
@@ -199,7 +199,7 @@ static int sdiohal_config_packer_chain(struct sdiohal_list_t *data_list,
 	struct mmc_host *host = sdio_func->card->host;
 	bool fifo = (fix_inc == SDIOHAL_DATA_FIX);
 	uint fn_num = sdio_func->num;
-	uint blk_num, blk_size, max_blk_count, max_req_size;
+	uint blk_num, blk_size, max_blk_count, max_req_size __maybe_unused;
 	struct mbuf_t *mbuf_node;
 	unsigned int sg_count, sg_data_size;
 	unsigned int i, ttl_len = 0, node_num;
@@ -320,7 +320,7 @@ int sdiohal_adma_pt_write(struct sdiohal_list_t *data_list)
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
 	int ret;
 	struct timespec64 tm_begin, tm_end;
-	static long time_total_ns;
+	static long time_total_ns __maybe_unused;
 	static int times_count;
 
 	ktime_get_real_ts64(&tm_begin);
@@ -366,7 +366,7 @@ int sdiohal_adma_pt_read(struct sdiohal_list_t *data_list)
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
 	int ret;
 	struct timespec64 tm_begin, tm_end;
-	static long time_total_ns;
+	static long time_total_ns __maybe_unused;
 	static int times_count;
 
 	ktime_get_real_ts64(&tm_begin);
@@ -461,10 +461,10 @@ void sdiohal_dump_aon_reg(void)
 	unsigned char btwf_db[256];
 	struct wcn_match_data *g_match_config = get_wcn_match_config();
 
-	pr_info("sdio dump_aon_reg entry\n");
+	pr_debug("sdio dump_aon_reg entry\n");
 	for (i = 0; i <= CP_128BIT_SIZE; i++) {
 		sdiohal_aon_readb(CP_PMU_STATUS + i, &reg_buf[i]);
-		pr_info("pmu sdio status:[0x%x]:0x%x\n",
+		pr_debug("pmu sdio status:[0x%x]:0x%x\n",
 			CP_PMU_STATUS + i, reg_buf[i]);
 	}
 
@@ -483,7 +483,7 @@ void sdiohal_dump_aon_reg(void)
 
 		for (j = 0; j < CP_HREADY_SIZE; j++) {
 			sdiohal_aon_readb(CP_BUS_HREADY + j, &reg_buf[j]);
-			pr_info("%s haddr %d:[0x%x]:0x%x\n",
+			pr_debug("%s haddr %d:[0x%x]:0x%x\n",
 				sdiohal_haddr[i], i,
 				CP_BUS_HREADY + j, reg_buf[j]);
 		}
@@ -516,7 +516,7 @@ void sdiohal_dump_aon_reg(void)
 	 * BIT(5):bt1 hready
 	 */
 	val = (reg_buf[0] & (BIT(2) | BIT(3) | BIT(4) | BIT(5)));
-	pr_info("val:0x%x\n", val);
+	pr_debug("val:0x%x\n", val);
 	if (val != 0xf) {
 		sdiohal_aon_readb(CP_RESET_SLAVE, &val);
 		val |=  BIT(5) | BIT(6);
@@ -524,12 +524,12 @@ void sdiohal_dump_aon_reg(void)
 
 		for (i = 0; i < CP_HREADY_SIZE; i++) {
 			sdiohal_aon_readb(CP_BUS_HREADY + i, &reg_buf[i]);
-			pr_info("after reset hready status:[0x%x]:0x%x\n",
+			pr_debug("after reset hready status:[0x%x]:0x%x\n",
 				 CP_BUS_HREADY + i, reg_buf[i]);
 		}
 	}
 
-	pr_info("sdio dump_aon_reg end\n\n");
+	pr_debug("sdio dump_aon_reg end\n\n");
 }
 EXPORT_SYMBOL_GPL(sdiohal_dump_aon_reg);
 
@@ -788,14 +788,14 @@ void sdiohal_set_carddump_status(unsigned int flag)
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
 
-	pr_info("carddump flag set[%d]\n", flag);
+	pr_debug("carddump flag set[%d]\n", flag);
 	if (flag == true) {
 		disable_irq(p_data->irq_num);
-		pr_info("disable rx int for dump\n");
+		pr_debug("disable rx int for dump\n");
 	}
 	p_data->card_dump_flag = flag;
 
-	pr_info("%s %s rx_irq_ns(%llu %llu), tx_sch_ns(%llu %llu).\n",
+	pr_debug("%s %s rx_irq_ns(%llu %llu), tx_sch_ns(%llu %llu).\n",
 		current->comm, __func__,
 		p_data->tm_begin_irq, p_data->tm_end_irq,
 		p_data->tm_begin_sch, p_data->tm_end_sch);
@@ -922,7 +922,7 @@ static struct mmc_host *sdiohal_dev_get_host(struct device_node *np_node)
 	}
 
 	host_mmc = drv_data;
-	pr_info("host_mmc:%p parent:%p, pdev->dev:%p\n",
+	pr_debug("host_mmc:%p parent:%p, pdev->dev:%p\n",
 		host_mmc, host_mmc->parent, &pdev->dev);
 
 	if (host_mmc->parent == &pdev->dev)
@@ -949,13 +949,13 @@ static int sdiohal_parse_dt(void)
 	if (of_get_property(np, "adma-rx", NULL))
 		p_data->adma_rx_enable = true;
 
-	pr_info("adma enable tx:%d, rx:%d\n",
+	pr_debug("adma enable tx:%d, rx:%d\n",
 		p_data->adma_tx_enable, p_data->adma_rx_enable);
 
 	if (of_get_property(np, "pwrseq", NULL))
 		p_data->pwrseq_enable = true;
 
-	pr_info("%s sdio pwrseq enable:%d\n",
+	pr_debug("%s sdio pwrseq enable:%d\n",
 		__func__, p_data->pwrseq_enable);
 
 	p_data->gpio_num = of_get_named_gpio(np, "m2-wakeup-ap-gpios", 0);
@@ -970,7 +970,7 @@ static int sdiohal_parse_dt(void)
 		pr_err("get host failed!!!");
 		return -1;
 	}
-	pr_info("get host ok!!!");
+	pr_debug("get host ok!!!");
 
 	return 0;
 }
@@ -995,8 +995,8 @@ static int sdiohal_suspend(struct device *dev)
 				sdio_record_power_notify(true);
 			ret = sdiohal_ops->power_notify(chn, false);
 			if (ret != 0) {
-				pr_info("[%s] chn:%d suspend fail\n",
-					__func__, chn);
+				pr_err_ratelimited("[%s] chn:%d suspend fail\n",
+						   __func__, chn);
 				atomic_set(&p_data->flag_suspending, 0);
 				mdbg_device_unlock_notify();
 				return ret;
@@ -1044,7 +1044,7 @@ static int sdiohal_suspend(struct device *dev)
 		enable_irq_wake(p_data->irq_num);
 
 	/* WARNING: wait for sending to complete? */
-	pr_info("[%s]done xmit_lock:%d\n", __func__, mutex_is_locked(&p_data->xmit_lock));
+	pr_debug("[%s]done xmit_lock:%d\n", __func__, mutex_is_locked(&p_data->xmit_lock));
 	return 0;
 
 fail_to_suspend:
@@ -1063,12 +1063,13 @@ power_notify:
 		if (sdiohal_ops && sdiohal_ops->power_notify) {
 			ret = sdiohal_ops->power_notify(chn, true);
 			if (ret != 0)
-				pr_info("[%s] chn:%d resume fail\n", __func__, chn);
+				pr_err_ratelimited("[%s] chn:%d resume fail\n",
+						   __func__, chn);
 		}
 	}
 
 	mdbg_device_unlock_notify();
-	pr_info("[%s]failed xmit_lock:%d\n", __func__, mutex_is_locked(&p_data->xmit_lock));
+	pr_debug("[%s]failed xmit_lock:%d\n", __func__, mutex_is_locked(&p_data->xmit_lock));
         atomic_set(&p_data->flag_suspending, 0);
 	return -EBUSY;
 }
@@ -1081,7 +1082,7 @@ static int sdiohal_resume(struct device *dev)
 	int chn;
 	int ret;
 
-	pr_info("[%s]enter xmit_lock:%d\n", __func__, mutex_is_locked(&p_data->xmit_lock));
+	pr_debug("[%s]enter xmit_lock:%d\n", __func__, mutex_is_locked(&p_data->xmit_lock));
 
 	if (device_may_wakeup(dev))
 		disable_irq_wake(p_data->irq_num);
@@ -1100,8 +1101,8 @@ static int sdiohal_resume(struct device *dev)
 		if (sdiohal_ops && sdiohal_ops->power_notify) {
 			ret = sdiohal_ops->power_notify(chn, true);
 			if (ret != 0)
-				pr_info("[%s] chn:%d resume fail\n",
-					__func__, chn);
+				pr_err_ratelimited("[%s] chn:%d resume fail\n",
+						   __func__, chn);
 		}
 	}
 	mdbg_device_unlock_notify();
@@ -1123,12 +1124,12 @@ static int sdiohal_set_cp_pin_status(void)
 		int reg_value;
 
 		sdiohal_readl(CP_GPIO1_REG, &reg_value);
-		pr_info("reg_value: 0x%x\n", reg_value);
+		pr_debug("reg_value: 0x%x\n", reg_value);
 		reg_value &= ~(CP_PIN_FUNC_WPU);
 		sdiohal_writel(CP_GPIO1_REG, &reg_value);
 
 		sdiohal_readl(CP_GPIO1_REG, &reg_value);
-		pr_info("reg_value: 0x%x\n", reg_value);
+		pr_debug("reg_value: 0x%x\n", reg_value);
 	}
 	return 0;
 }
@@ -1145,7 +1146,7 @@ int sdiohal_runtime_get(void)
 	if (!p_data->pwrseq_enable) {
 		if (p_data->irq_num != 0) {
 			enable_irq(p_data->irq_num);
-			pr_info("%s enable irq ok\n", __func__);
+			pr_debug("%s enable irq ok\n", __func__);
 		}
 		return 0;
 	}
@@ -1170,7 +1171,7 @@ int sdiohal_runtime_get(void)
 	sdiohal_set_cp_pin_status();
 	sdiohal_enable_slave_irq();
 	enable_irq(p_data->irq_num);
-	pr_info("%s enable device ok\n", __func__);
+	pr_debug("%s enable device ok\n", __func__);
 
 	return ret;
 }
@@ -1179,7 +1180,7 @@ int sdiohal_runtime_put(void)
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
 
-	pr_info("%s disable device\n", __func__);
+	pr_debug("%s disable device\n", __func__);
 
 	if (!p_data)
 		return -ENODEV;
@@ -1199,7 +1200,7 @@ static int sdiohal_probe(struct sdio_func *func,
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
 	int ret;
 
-	pr_info("%s func num is %d!!!", __func__, func->num);
+	pr_debug("%s func num is %d!!!", __func__, func->num);
 
 	ret = sdiohal_get_dev_func(func);
 	if (ret < 0)
@@ -1216,7 +1217,7 @@ static int sdiohal_probe(struct sdio_func *func,
 		if (ret < 0)
 			return ret;
 
-		pr_info("enable sdio func1 ok\n");
+		pr_debug("enable sdio func1 ok\n");
 
 		sdiohal_enable_slave_irq();
 	} else
@@ -1261,7 +1262,7 @@ static int sdiohal_probe(struct sdio_func *func,
 	if (scan_card_notify != NULL)
 		scan_card_notify();
 
-	pr_info("%s scaffcard successful! nodify callback:%p\n",
+	pr_debug("%s scaffcard successful! nodify callback:%p\n",
 		__func__, scan_card_notify);
 
 	return 0;
@@ -1282,7 +1283,7 @@ static void sdiohal_remove(struct sdio_func *func)
         if (func->num == 1)
                 kfree(p_data->sdio_func[FUNC_0]);
 
-	pr_info("%s remove card successful\n", __func__);
+	pr_debug("%s remove card successful\n", __func__);
 }
 
 /*
@@ -1294,7 +1295,7 @@ int wcn_thread_setattr(unsigned dir, struct sched_attr *attr)
 	struct task_struct *target;
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
 
-	pr_info("%s: dir %u\n", __func__, dir);
+	pr_debug("%s: dir %u\n", __func__, dir);
 
 	if (!attr)
 		return -EINVAL;
@@ -1378,7 +1379,7 @@ void sdiohal_remove_card(void *wcn_dev)
 					msecs_to_jiffies(5000)) == 0)
 		pr_err("remove card time out\n");
 	else
-		pr_info("remove card end\n");
+		pr_debug("remove card end\n");
 
 	sdio_unregister_driver(&sdiohal_driver);
 	sdiohal_unlock_scan_ws();
@@ -1388,7 +1389,7 @@ int sdiohal_scan_card(void *wcn_dev)
 {
 	struct sdiohal_data_t *p_data = sdiohal_get_data();
 
-	pr_info("%s\n", __func__);
+	pr_debug("%s\n", __func__);
 
 	if (!p_data->sdio_dev_host) {
 		pr_err("sdio_sdio_rescan get host failed!\n");
@@ -1396,7 +1397,7 @@ int sdiohal_scan_card(void *wcn_dev)
 	}
 
 	if (WCN_CARD_EXIST(&p_data->xmit_cnt)) {
-		pr_info("Already exist card!\n");
+		pr_warn("Already exist card!\n");
 		sdiohal_remove_card(wcn_dev);
 		msleep(100);
 	}
@@ -1415,7 +1416,7 @@ int sdiohal_scan_card(void *wcn_dev)
 	}
 
 	sdiohal_unlock_scan_ws();
-	pr_info("scan end\n");
+	pr_debug("scan end\n");
 
 	return 0;
 }

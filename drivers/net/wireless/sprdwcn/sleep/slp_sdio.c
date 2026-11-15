@@ -42,7 +42,7 @@ static void req_slp_isr(void)
 
 		atomic_set(&(slp_mgr->cp2_state), STAY_SLPING);
 	} else {
-		WCN_INFO("forbid slp module-0x%x\n",
+		WCN_DBG("forbid slp module-0x%x\n",
 			 slp_mgr->active_module);
 	}
 	mutex_unlock(&(slp_mgr->drv_slp_lock));
@@ -54,10 +54,10 @@ static void wakeup_ack_isr(void)
 
 	slp_mgr = slp_get_info();
 	if (STAY_SLPING == (atomic_read(&(slp_mgr->cp2_state)))) {
-		WCN_INFO("wakeup ack\n");
+		WCN_DBG("wakeup ack\n");
 		complete(&(slp_mgr->wakeup_ack_completion));
 	} else
-		WCN_INFO("discard wakeup ack\n");
+		WCN_DBG("discard wakeup ack\n");
 }
 
 int slp_pub_int_regcb(void)

@@ -89,7 +89,7 @@ static long wcn_op_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		return -EFAULT;
 	}
 
-	pr_info("WCN OPERATION IOCTL: 0x%x, addr=0x%x, val=0x%p, lenght=%u.\n",
+	pr_debug("WCN OPERATION IOCTL: 0x%x, addr=0x%x, val=0x%p, lenght=%u.\n",
 		cmd, wcn_op_attr.addr, wcn_op_attr.val, wcn_op_attr.length);
 
 	ptr = kmalloc(wcn_op_attr.length, GFP_KERNEL);
@@ -148,7 +148,7 @@ int wcn_op_init(void)
 {
 	int ret;
 
-	pr_info("%s\n", __func__);
+	pr_debug("%s\n", __func__);
 	ret = misc_register(&wcn_op_device);
 	if (ret) {
 		pr_err("wcn operation dev add failed!!!\n");
