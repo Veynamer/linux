@@ -218,6 +218,28 @@
 			124872	 43
 		>;
 	};
+
+	wcn_pwrseq: wcn-pwrseq {
+		compatible = "unisoc,marlin3lite-pwrseq";
+		status = "okay";
+
+		enable-gpios = <&ap_gpio 143 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&ap_gpio 95 GPIO_ACTIVE_LOW>;
+
+		avdd12-supply = <&vddwcn>;
+		avdd33-supply = <&vddwifipa>;
+		dcxo18-supply = <&vddsim2>;
+
+		sprd,pmic = <&sc2730_pmic>;
+
+		sprd,avdd33-bound-wbreq = <0x1acc 0x04 0x00 0x04>;
+		sprd,avdd12-bound-wbreq = <0x1ac8 0x1000 0x00 0x1000>;
+		sprd,avdd12-parent-bound-chip = <0x1a4c 0x01 0x00 0x01>;
+
+		clocks = <&aon_clk CLK_AUX0>, <&ext_32k>,
+			 <&aonapb_gate CLK_AUX0_EB>;
+		clock-names = "clk_32k", "source", "enable";
+	};
 };
 
 &thm_zone {
@@ -415,10 +437,70 @@
 	bus-width = <4>;
 	no-sd;
 	no-mmc;
+	mmc-pwrseq = <&wcn_pwrseq>;
 	sprd,phy-delay-sd-uhs-sdr104 = <0x7f 0x76 0x69 0x69>;
 	sprd,phy-delay-sd-uhs-sdr50 = <0x7f 0xf7 0xf5 0xf5>;
 	sd-uhs-sdr104;
 	sd-uhs-sdr50;
+
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	wcn_sdio: wcn@1 {
+		compatible = "unisoc,marlin3lite";
+		reg = <1>;
+		status = "okay";
+
+		interrupt-parent = <&ap_gpio>;
+		interrupts = <32 IRQ_TYPE_LEVEL_HIGH>,
+			     <94 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "data", "pub-int";
+
+		/*
+		 * The CP data-ready line must also be described as a GPIO so
+		 * the driver can put it in input mode before requesting the
+		 * IRQ: the sprd gpiochip does not do this automatically for
+		 * interrupt-only pins (matches BSP gpio_request +
+		 * gpio_direction_input on m2-wakeup-ap).
+		 */
+		data-gpios = <&ap_gpio 32 GPIO_ACTIVE_HIGH>;
+
+		clocks = <&aon_clk CLK_AUX0>, <&ext_32k>,
+			 <&aonapb_gate CLK_AUX0_EB>;
+		clock-names = "clk_32k", "source", "enable";
+		assigned-clocks = <&aon_clk CLK_AUX0>;
+		assigned-clock-parents = <&ext_32k>;
+
+		wakeup-source;
+
+		btwf {
+			firmware-name = "sprd/wcnmodem.bin";
+			sprd,btwf-base = <0x40500000>;
+			sprd,sync-addr = <0x405e73b0>;
+
+			wlan {
+				compatible = "sprd,umw2652-wlan", "sprd,sc2355-wlan-sdio";
+				nvmem-cells = <&uid_start>, <&uid_end>;
+				nvmem-cell-names = "uid-start", "uid-end";
+			};
+
+			bluetooth {
+				compatible = "sprd,bluetooth-hci";
+				nvmem-cells = <&uid_start>, <&uid_end>;
+				nvmem-cell-names = "uid-start", "uid-end";
+			};
+
+			fm {
+				compatible = "sprd,sc2355-fm";
+				status = "disabled";
+			};
+		};
+
+		gnss {
+			compatible = "sprd,sc2355-gnss";
+			firmware-name = "sprd/gnssmodem.bin";
+		};
+	};
 };
 
 /* EMMC storage */
@@ -473,25 +555,6 @@
 			remote-endpoint = <&tcpc_hs_ep>;
 		};
 	};
-};
-
-
-/* Unisoc Marlin3-Lite (SC2355) WCN SDIO1 */
-&wcn {
-	status = "okay";
-
-	enable-gpios = <&ap_gpio 143 GPIO_ACTIVE_LOW>;
-	reset-gpios = <&ap_gpio 95 GPIO_ACTIVE_LOW>;
-	m2-to-ap-irq-gpios = <&ap_gpio 94 GPIO_ACTIVE_LOW>;
-	m2-wakeup-ap-gpios = <&ap_gpio 32 GPIO_ACTIVE_LOW>;
-
-	avdd12-supply = <&vddwcn>;
-	avdd33-supply = <&vddwifipa>;
-	dcxo18-supply = <&vddsim2>;
-
-	avdd33-bound-wbreq = <0x1acc 0x04 0x00 0x04>;
-	avdd12-bound-wbreq = <0x1ac8 0x1000 0x00 0x1000>;
-	avdd12-parent-bound-chip = <0x1a4c 0x01 0x00 0x01>;
 };
 
 &cpufreq {

@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config UNISOC_WCN_SDIO
+	tristate "Unisoc SC2355 WCN SDIO core"
+	depends on MMC && OF
+	depends on FW_LOADER
+	help
+	  Core driver for the external Unisoc SC2355 (Marlin3-Lite)
+	  WCN combo attached over SDIO. It provides firmware download,
+	  SDIO packet channel transport, runtime reset and platform
+	  devices for the Wi-Fi, Bluetooth, FM and GNSS functions.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called unisoc-wcn-sdio.

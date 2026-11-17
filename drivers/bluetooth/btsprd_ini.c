@@ -7,6 +7,7 @@
 
 #include <linux/errno.h>
 #include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/string.h>
 
 #include "btsprd_ini.h"
@@ -176,3 +177,7 @@ int btsprd_ini_pack(const char *ini, size_t ini_len, u8 *out, size_t out_max)
 	}
 	return (int)out_pos;
 }
+EXPORT_SYMBOL_GPL(btsprd_ini_pack);
+
+MODULE_DESCRIPTION("Unisoc Bluetooth pskey/RF INI parser");
+MODULE_LICENSE("GPL");

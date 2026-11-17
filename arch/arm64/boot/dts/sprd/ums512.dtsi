@@ -325,6 +325,7 @@
 			     <GIC_PPI 14 IRQ_TYPE_LEVEL_HIGH>, /* Physical Non-Secure PPI */
 			     <GIC_PPI 11 IRQ_TYPE_LEVEL_HIGH>, /* Virtual PPI */
 			     <GIC_PPI 10 IRQ_TYPE_LEVEL_HIGH>; /* Hipervisor PPI */
+		arm,no-tick-in-suspend;
 	};
 
 	pmu-a55 {
@@ -1982,38 +1983,6 @@
 	socinfo: socinfo {
 		compatible = "sprd,ums512-socinfo";
 		sprd,syscon-aon-apb = <&aon_apb_regs>;
-	};
-
-	wcn: sprd-marlin3 {
-		compatible = "unisoc,marlin3lite_sdio";
-		status = "disabled";
-
-		adma-tx;
-		adma-rx;
-
-		xtal-26m-clk-type = "TSX";
-
-		clocks = <&aon_clk CLK_AUX0>, <&ext_32k>,
-		<&aonapb_gate CLK_AUX0_EB>;
-		clock-names = "clk_32k", "source", "enable";
-
-		extcon = <&sdio1>;
-		sdhci-name = <&sdio1>;
-
-		sprd,btwf-file-name = "sprd/wcnmodem.bin";
-
-		/* UMW2652 is the lite of sc2355 */
-		wlan {
-			compatible = "sprd,umw2652-wlan", "sprd,sc2355-wlan-sdio";
-			nvmem-cells = <&uid_start>, <&uid_end>;
-			nvmem-cell-names = "uid-start", "uid-end";
-		};
-
-		bluetooth {
-			compatible = "sprd,bluetooth-hci";
-			nvmem-cells = <&uid_start>, <&uid_end>;
-			nvmem-cell-names = "uid-start", "uid-end";
-		};
 	};
 
 	ext_26m: clk-26m {

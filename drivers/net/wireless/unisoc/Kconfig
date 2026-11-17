@@ -29,12 +29,11 @@ config SC23XX_SIPC
 config SC23XX_SDIO
 	tristate "Unisoc SC2355 external SDIO WiFi support"
 	depends on CFG80211
-	depends on UNISOC_WCN_BSP
+	depends on UNISOC_WCN_SDIO
 	select SC23XX_CORE
 	help
 	  This driver implements support for WiFi on an external Unisoc
 	  SC2355 (Marlin3-Lite) WiFi/BT combo chip attached over SDIO,
-	  using the sprdwcn BSP bus (sdiohal) for transport and firmware
-	  download.
+	  using the SDIO WCN core for transport and firmware download.
 
 endif
