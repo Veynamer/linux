@@ -201,6 +201,7 @@ static int touch_get_report_data(unsigned int offset,
 	unsigned int available_bits;
 	unsigned int remaining_bits;
 	unsigned char *touch_report;
+	size_t report_bits;
 	struct ovt_tcm_hcd *tcm_hcd = touch_hcd->tcm_hcd;
 
 	if (bits == 0 || bits > 32) {
@@ -209,12 +210,18 @@ static int touch_get_report_data(unsigned int offset,
 		return -EINVAL;
 	}
 
-	if (offset + bits > tcm_hcd->report.buffer.data_length * 8) {
+	report_bits = (size_t)tcm_hcd->report.buffer.data_length * 8;
+	if (offset >= report_bits || bits > report_bits - offset) {
 		*data = 0;
 		return 0;
 	}
 
 	touch_report = tcm_hcd->report.buffer.buf;
+	if (!touch_report) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+				"Invalid touch report buffer\n");
+		return -EINVAL;
+	}
 
 	output_data = 0;
 	remaining_bits = bits;
@@ -276,13 +283,22 @@ static int touch_parse_report(void)
 	touch_data = &touch_hcd->touch_data;
 	object_data = touch_hcd->touch_data.object_data;
 
+	if (!touch_hcd->max_objects)
+		return 0;
+
+	if (!object_data) {
+		LOGE(tcm_hcd->pdev->dev.parent,
+				"Invalid object data buffer\n");
+		return -EINVAL;
+	}
+
 	config_data = tcm_hcd->config.buf;
 	config_size = tcm_hcd->config.data_length;
 
 	report_size = tcm_hcd->report.buffer.data_length;
 
 	size = sizeof(*object_data) * touch_hcd->max_objects;
-	memset(touch_hcd->touch_data.object_data, 0x00, size);
+	memset(object_data, 0x00, size);
 
 	num_of_active_objects = false;
 
@@ -294,6 +310,18 @@ static int touch_parse_report(void)
 
 	while (idx < config_size) {
 		code = config_data[idx++];
+
+		if (code != TOUCH_END &&
+				code != TOUCH_FOREACH_ACTIVE_OBJECT &&
+				code != TOUCH_FOREACH_OBJECT &&
+				code != TOUCH_FOREACH_END &&
+				code != TOUCH_PAD_TO_NEXT_BYTE &&
+				idx >= config_size) {
+			LOGE(tcm_hcd->pdev->dev.parent,
+					"Truncated touch report config\n");
+			return -EINVAL;
+		}
+
 		switch (code) {
 		case TOUCH_END:
 			goto exit;
@@ -314,7 +342,9 @@ static int touch_parse_report(void)
 					objects++;
 					if (objects < active_objects)
 						idx = next;
-				} else if (offset < report_size * 8) {
+				} else if (offset < report_size * 8 &&
+						objects < touch_hcd->max_objects) {
+					objects++;
 					idx = next;
 				}
 			} else {
@@ -344,6 +374,11 @@ static int touch_parse_report(void)
 				LOGE(tcm_hcd->pdev->dev.parent,
 						"Failed to get object index\n");
 				return retval;
+			}
+			if (obj >= touch_hcd->max_objects) {
+				LOGE(tcm_hcd->pdev->dev.parent,
+						"Invalid object index %u\n", obj);
+				return -EINVAL;
 			}
 			offset += bits;
 			break;
@@ -581,6 +616,12 @@ static int touch_parse_report(void)
 				LOGE(tcm_hcd->pdev->dev.parent,
 						"Failed to get number of active objects\n");
 				return retval;
+			}
+			if (data > touch_hcd->max_objects) {
+				LOGE(tcm_hcd->pdev->dev.parent,
+						"Active objects %u exceed max %u\n",
+						data, touch_hcd->max_objects);
+				data = touch_hcd->max_objects;
 			}
 			active_objects = data;
 			num_of_active_objects = true;
