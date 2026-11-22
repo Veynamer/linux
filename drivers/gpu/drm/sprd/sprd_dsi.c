@@ -831,28 +831,57 @@ static void sprd_dsi_bridge_pre_enable(struct drm_bridge *bridge)
 {
 	struct sprd_dsi *dsi = bridge_to_dsi(bridge);
 	struct dsi_context *ctx = &dsi->ctx;
+	int ret;
 
-	clk_prepare_enable(ctx->clk);
+	mutex_lock(&dsi->lock);
+	if (dsi->enabled)
+		goto out;
+
+	ret = clk_prepare_enable(ctx->clk);
+	if (ret) {
+		drm_err(dsi->drm, "failed to enable DSI clock: %d\n", ret);
+		goto out;
+	}
 
 	sprd_dsi_init(ctx);
-	if (ctx->work_mode == DSI_MODE_VIDEO)
-		sprd_dsi_dpi_video(ctx);
-	else
+	if (ctx->work_mode == DSI_MODE_VIDEO) {
+		ret = sprd_dsi_dpi_video(ctx);
+		if (ret)
+			goto err_fini;
+	} else {
 		sprd_dsi_edpi_video(ctx);
+	}
 
-	sprd_dphy_init(ctx);
+	ret = sprd_dphy_init(ctx);
+	if (ret) {
+		sprd_dphy_fini(ctx);
+		goto err_fini;
+	}
 
 	/*
 	 * Initialize in command mode to allow panels to prepare by sending
 	 * DSI commands before the DPU is started.
 	 */
 	sprd_dsi_set_work_mode(ctx, DSI_MODE_CMD);
+	dsi->enabled = true;
+	drm_dbg(dsi->drm, "DSI host enabled in command mode\n");
+	goto out;
+
+err_fini:
+	sprd_dsi_fini(ctx);
+	clk_disable_unprepare(ctx->clk);
+out:
+	mutex_unlock(&dsi->lock);
 }
 
 static void sprd_dsi_bridge_enable(struct drm_bridge *bridge)
 {
 	struct sprd_dsi *dsi = bridge_to_dsi(bridge);
 	struct dsi_context *ctx = &dsi->ctx;
+
+	mutex_lock(&dsi->lock);
+	if (!dsi->enabled)
+		goto out;
 
 	sprd_dsi_set_work_mode(ctx, ctx->work_mode);
 	sprd_dsi_state_reset(ctx);
@@ -868,6 +897,9 @@ static void sprd_dsi_bridge_enable(struct drm_bridge *bridge)
 	}
 
 	sprd_dpu_run(to_sprd_crtc(dsi->encoder.crtc));
+	drm_dbg(dsi->drm, "DSI output enabled\n");
+out:
+	mutex_unlock(&dsi->lock);
 }
 
 static void sprd_dsi_bridge_disable(struct drm_bridge *bridge)
@@ -875,10 +907,17 @@ static void sprd_dsi_bridge_disable(struct drm_bridge *bridge)
 	struct sprd_dsi *dsi = bridge_to_dsi(bridge);
 	struct dsi_context *ctx = &dsi->ctx;
 
+	mutex_lock(&dsi->lock);
+	if (!dsi->enabled)
+		goto out;
+
 	sprd_dpu_stop(to_sprd_crtc(dsi->encoder.crtc));
 
 	/* Switch to command mode to allow panels to unprepare */
 	sprd_dsi_set_work_mode(ctx, DSI_MODE_CMD);
+	drm_dbg(dsi->drm, "DSI output stopped\n");
+out:
+	mutex_unlock(&dsi->lock);
 }
 
 static void sprd_dsi_bridge_post_disable(struct drm_bridge *bridge)
@@ -886,10 +925,18 @@ static void sprd_dsi_bridge_post_disable(struct drm_bridge *bridge)
 	struct sprd_dsi *dsi = bridge_to_dsi(bridge);
 	struct dsi_context *ctx = &dsi->ctx;
 
+	mutex_lock(&dsi->lock);
+	if (!dsi->enabled)
+		goto out;
+
+	dsi->enabled = false;
 	sprd_dphy_fini(ctx);
 	sprd_dsi_fini(ctx);
 
 	clk_disable_unprepare(ctx->clk);
+	drm_dbg(dsi->drm, "DSI host disabled\n");
+out:
+	mutex_unlock(&dsi->lock);
 }
 
 static const struct drm_bridge_funcs sprd_dsi_bridge_funcs = {
@@ -1052,20 +1099,34 @@ static ssize_t sprd_dsi_host_transfer(struct mipi_dsi_host *host,
 {
 	struct sprd_dsi *dsi = host_to_dsi(host);
 	const u8 *tx_buf = msg->tx_buf;
+	ssize_t ret = 0;
+
+	if (msg->tx_len > U16_MAX || msg->rx_len > U8_MAX)
+		return -EMSGSIZE;
+
+	mutex_lock(&dsi->lock);
+	if (!dsi->enabled) {
+		dev_dbg(host->dev, "rejecting transfer while DSI host is disabled\n");
+		ret = -EHOSTDOWN;
+		goto out;
+	}
 
 	if (msg->rx_buf && msg->rx_len) {
 		u8 lsb = (msg->tx_len > 0) ? tx_buf[0] : 0;
 		u8 msb = (msg->tx_len > 1) ? tx_buf[1] : 0;
 
-		return sprd_dsi_rd_pkt(&dsi->ctx, msg->channel, msg->type,
+		ret = sprd_dsi_rd_pkt(&dsi->ctx, msg->channel, msg->type,
 				msb, lsb, msg->rx_buf, msg->rx_len);
+	} else if (msg->tx_buf && msg->tx_len) {
+		ret = sprd_dsi_wr_pkt(&dsi->ctx, msg->channel, msg->type,
+					tx_buf, msg->tx_len);
+		if (!ret)
+			ret = msg->tx_len;
 	}
 
-	if (msg->tx_buf && msg->tx_len)
-		return sprd_dsi_wr_pkt(&dsi->ctx, msg->channel, msg->type,
-					tx_buf, msg->tx_len);
-
-	return 0;
+out:
+	mutex_unlock(&dsi->lock);
+	return ret;
 }
 
 static const struct mipi_dsi_host_ops sprd_dsi_host_ops = {
@@ -1105,6 +1166,7 @@ static int sprd_dsi_probe(struct platform_device *pdev)
 		return PTR_ERR(dsi);
 
 	dev_set_drvdata(dev, dsi);
+	mutex_init(&dsi->lock);
 
 	dsi->host.ops = &sprd_dsi_host_ops;
 	dsi->host.dev = dev;
