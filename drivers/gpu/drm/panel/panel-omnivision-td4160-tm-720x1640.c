@@ -6,6 +6,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 
 
 #include <video/mipi_display.h>
@@ -27,6 +28,8 @@ struct td4160tm_panel {
 	struct drm_panel panel;
 	struct mipi_dsi_device *dsi;
 	struct gpio_desc *reset_gpio;
+	struct mutex lock;
+	bool prepared;
 	u16 brightness;
 };
 
@@ -125,23 +128,30 @@ static int td4160tm_panel_prepare(struct drm_panel *panel)
 	struct device *dev = &ctx->dsi->dev;
 	int ret;
 
+	mutex_lock(&ctx->lock);
 	td4160tm_panel_reset(ctx);
 
 	ret = td4160tm_panel_on(ctx);
 	if (ret < 0) {
 		dev_err(dev, "Failed to initialize panel: %d\n", ret);
 		gpiod_set_value_cansleep(ctx->reset_gpio, 1);
-		return ret;
+		goto out;
 	}
 
-	return 0;
+	ctx->prepared = true;
+out:
+	mutex_unlock(&ctx->lock);
+	return ret;
 }
 
 static int td4160tm_panel_unprepare(struct drm_panel *panel)
 {
 	struct td4160tm_panel *ctx = to_td4160tm_panel(panel);
 
+	mutex_lock(&ctx->lock);
+	ctx->prepared = false;
 	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
+	mutex_unlock(&ctx->lock);
 
 	return 0;
 }
@@ -152,10 +162,16 @@ static int td4160tm_panel_disable(struct drm_panel *panel)
 	struct device *dev = &ctx->dsi->dev;
 	int ret;
 
+	mutex_lock(&ctx->lock);
+	if (!ctx->prepared)
+		goto out;
+
 	ret = td4160tm_panel_off(ctx);
 	if (ret < 0)
 		dev_err(dev, "Failed to un-initialize panel: %d\n", ret);
 
+out:
+	mutex_unlock(&ctx->lock);
 	return 0;
 }
 
@@ -214,14 +230,20 @@ static int td4160tm_panel_bl_update_status(struct backlight_device *bl)
 	struct mipi_dsi_device *dsi = bl_get_data(bl);
 	struct td4160tm_panel *ctx = mipi_dsi_get_drvdata(dsi);
 	u16 brightness = backlight_get_brightness(bl);
-	int ret;
+	int ret = 0;
+
+	mutex_lock(&ctx->lock);
+	if (!ctx->prepared)
+		goto out;
 
 	ret = mipi_dsi_dcs_set_display_brightness_large(dsi, brightness);
 	if (ret < 0)
-		return ret;
+		goto out;
 
 	ctx->brightness = brightness;
-	return 0;
+out:
+	mutex_unlock(&ctx->lock);
+	return ret;
 }
 
 static const struct backlight_ops td4160tm_panel_bl_ops = {
@@ -261,6 +283,7 @@ static int td4160tm_panel_probe(struct mipi_dsi_device *dsi)
 				     "Failed to get reset-gpios\n");
 
 	ctx->dsi = dsi;
+	mutex_init(&ctx->lock);
 	mipi_dsi_set_drvdata(dsi, ctx);
 
 	dsi->lanes = 4;
