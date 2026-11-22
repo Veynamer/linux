@@ -456,8 +456,6 @@ static int sc27xx_pd_set_vbus(struct tcpc_dev *tcpc, bool on, bool charge)
 	if (!pd->vbus || pd->vbus_on == on)
 		goto out;
 
-	pd->vbus_on = on;
-
 	if (on)
 		ret = regulator_enable(pd->vbus);
 	else
@@ -465,6 +463,7 @@ static int sc27xx_pd_set_vbus(struct tcpc_dev *tcpc, bool on, bool charge)
 
 	if (ret < 0)
 		goto out;
+	pd->vbus_on = on;
 
 	/* no VBUS interrupts are sent, so polling is needed */
 	if (!pd->detect_pending) {
@@ -527,12 +526,12 @@ static int sc27xx_pd_set_vconn(struct tcpc_dev *tcpc, bool on)
 	if (!pd->vconn || pd->vconn_on == on)
 		goto out;
 
-	pd->vconn_on = on;
-
 	if (on)
 		ret = regulator_enable(pd->vconn);
 	else
 		ret = regulator_disable(pd->vconn);
+	if (!ret)
+		pd->vconn_on = on;
 
 out:
 	mutex_unlock(&pd->lock);
@@ -1449,9 +1448,8 @@ static irqreturn_t sc27xx_typec_irq(int irq, void *dev_id)
 		goto out;
 	}
 
-	mutex_unlock(&pd->lock);
-
 out:
+	mutex_unlock(&pd->lock);
 	return IRQ_HANDLED;
 }
 
@@ -1618,8 +1616,8 @@ static int sc27xx_pd_probe(struct platform_device *pdev)
 	if (IS_ERR(pd->vbus)) {
 		ret = PTR_ERR(pd->vbus);
 		if (ret != -ENODEV) {
-			dev_err(&pdev->dev, "failed to get vbus regulator\n");
-			return ret;
+			return dev_err_probe(&pdev->dev, ret,
+					     "failed to get vbus regulator\n");
 		}
 		pd->vbus = NULL;
 	} else {
@@ -1636,8 +1634,8 @@ static int sc27xx_pd_probe(struct platform_device *pdev)
 		}
 		pd->vconn = NULL;
 	} else {
-		if (regulator_is_enabled(pd->vbus) > 0)
-			regulator_disable(pd->vbus);
+		if (regulator_is_enabled(pd->vconn) > 0)
+			regulator_disable(pd->vconn);
 	}
 
 	ret = devm_request_threaded_irq(pd->dev, pd_irq, NULL,
