@@ -8,6 +8,7 @@
 
 #include <linux/clk.h>
 #include <linux/device.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/regmap.h>
 #include <video/videomode.h>
@@ -121,6 +122,8 @@ struct dsi_context {
 
 struct sprd_dsi {
 	struct drm_device *drm;
+	struct mutex lock; /* serializes transfers with host clock changes */
+	bool enabled;
 	struct mipi_dsi_host host;
 	struct mipi_dsi_device *slave;
 	struct drm_encoder encoder;
