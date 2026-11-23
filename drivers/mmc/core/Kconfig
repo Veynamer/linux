@@ -34,6 +34,18 @@ config PWRSEQ_SIMPLE
 	  This driver can also be built as a module. If so, the module
 	  will be called pwrseq_simple.
 
+config PWRSEQ_SPRD_WCN
+	tristate "Unisoc SC2355 WCN power sequence support"
+	depends on OF
+	depends on SPI
+	help
+	  This selects hardware power sequence support for the Unisoc SC2355
+	  WCN combo chip. It controls the chip enable/reset lines, supplies
+	  and low-power clock before the SDIO card is enumerated.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called pwrseq_sprd_wcn.
+
 config MMC_BLOCK
 	tristate "MMC block device driver"
 	depends on BLOCK
