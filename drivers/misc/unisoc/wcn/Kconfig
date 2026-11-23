@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config UNISOC_WCN_SDIO
+	tristate "Unisoc Marlin3 WCN over SDIO"
+	depends on MMC && OF
+	depends on FW_LOADER
+	help
+	  Shared driver for Unisoc Marlin3 wireless combo chips attached over
+	  SDIO. It provides firmware download, packet channels, power
+	  management and reset for the Wi-Fi, Bluetooth, FM and GNSS devices.
+	  Currently the Marlin3lite (UMW2652) variant is supported.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called unisoc-wcn-sdio.
