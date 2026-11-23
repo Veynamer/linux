@@ -4,6 +4,7 @@
  */
 
 #include <linux/firmware.h>
+#include <linux/nvmem-consumer.h>
 #include <linux/rtnetlink.h>
 
 #include "sc23xx.h"
@@ -103,47 +104,61 @@ static const struct ieee80211_txrx_stypes sc23xx_mgmt_stypes[NUM_NL80211_IFTYPES
 	},
 };
 
-#ifdef CONFIG_PM
-
-static const struct wiphy_wowlan_support sc23xx_wowlan_support = {
-	.flags = WIPHY_WOWLAN_ANY,
-};
-
-static int sc23xx_set_suspend(struct sc23xx_dev *sdev, bool suspend)
+/*
+ * The WCN children are descendants of the SDIO function. cfg80211 therefore
+ * completes the WLAN handshake before WCN suspends the bus, and resumes it
+ * after WCN has restored SDIO and awakened CP2.
+ */
+int sc23xx_set_suspend(struct sc23xx_dev *sdev, bool suspend)
 {
 	struct sc23xx_vif *vif;
-	int ret = 0, srcu_idx, i;
+	int ret = 0, err, srcu_idx, i;
 
 	srcu_idx = srcu_read_lock(&sdev->vif_srcu);
 	for (i = 0; i < SC23XX_VIF_NUM; i++) {
 		vif = srcu_dereference(sdev->vif[i], &sdev->vif_srcu);
 		if (vif && test_bit(SC23XX_FLAG_OPENED, &vif->flags)) {
-			ret = sc23xx_cmd_set_suspend(vif, suspend);
-			break;
+			err = sc23xx_cmd_set_suspend(vif, suspend);
+			if (err && !ret)
+				ret = err;
+			if (err && suspend)
+				break;
+		}
+	}
+	if (ret && suspend) {
+		/* Resume all attempted interfaces when suspend must be aborted. */
+		for (; i >= 0; i--) {
+			vif = srcu_dereference(sdev->vif[i], &sdev->vif_srcu);
+			if (vif && test_bit(SC23XX_FLAG_OPENED, &vif->flags)) {
+				err = sc23xx_cmd_set_suspend(vif, false);
+				if (err)
+					wiphy_warn(sdev->wiphy,
+						   "suspend rollback failed for vif %d: %d\n",
+						   i, err);
+			}
 		}
 	}
 	srcu_read_unlock(&sdev->vif_srcu, srcu_idx);
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(sc23xx_set_suspend);
+
+#ifdef CONFIG_PM_SLEEP
+static const struct wiphy_wowlan_support sc23xx_wowlan_support = {
+	.flags = WIPHY_WOWLAN_ANY,
+};
 
 static int sc23xx_suspend(struct wiphy *wiphy, struct cfg80211_wowlan *wow)
 {
-	struct sc23xx_dev *sdev = wiphy_priv(wiphy);
-
-	wiphy_dbg(wiphy, "WoWLAN requested: %s\n", wow ? "yes" : "no");
-
-	return sc23xx_set_suspend(sdev, true);
+	return sc23xx_set_suspend(wiphy_priv(wiphy), true);
 }
 
 static int sc23xx_resume(struct wiphy *wiphy)
 {
-	struct sc23xx_dev *sdev = wiphy_priv(wiphy);
-
-	return sc23xx_set_suspend(sdev, false);
+	return sc23xx_set_suspend(wiphy_priv(wiphy), false);
 }
-
-#endif /* CONFIG_PM */
+#endif
 
 static int sc23xx_scan(struct wiphy *wiphy, struct cfg80211_scan_request *request)
 {
@@ -152,8 +167,8 @@ static int sc23xx_scan(struct wiphy *wiphy, struct cfg80211_scan_request *reques
 
 	mutex_lock(&vif->scan_lock);
 	if (vif->scan_req) {
-		ret = -EBUSY;
-		goto err_out;
+		mutex_unlock(&vif->scan_lock);
+		return -EBUSY;
 	}
 
 	vif->scan_req = request;
@@ -163,18 +178,23 @@ static int sc23xx_scan(struct wiphy *wiphy, struct cfg80211_scan_request *reques
 		ret = sc23xx_cmd_set_probe_req_ie(vif, request->ie,
 						  request->ie_len);
 		if (ret)
-			goto err_out;
+			goto err_drop;
 	}
 
 	ret = sc23xx_cmd_scan(vif, request);
-	if (ret) {
-		sc23xx_notify_scan_done(vif, true);
-		return ret;
-	}
+	if (ret)
+		goto err_drop;
 
 	return 0;
 
-err_out:
+err_drop:
+	/*
+	 * cfg80211 owns the request again the moment ->scan() returns an
+	 * error, so drop our pointer rather than handing it back later
+	 * through cfg80211_scan_done().
+	 */
+	mutex_lock(&vif->scan_lock);
+	vif->scan_req = NULL;
 	mutex_unlock(&vif->scan_lock);
 	return ret;
 }
@@ -322,16 +342,33 @@ static int sc23xx_sched_scan_stop(struct wiphy *wiphy, struct net_device *ndev,
 	return 0;
 }
 
-static int sc23xx_set_rekey_data(struct wiphy *wiphy, struct net_device *ndev,
-				 struct cfg80211_gtk_rekey_data *data)
+static int sc23xx_get_station(struct wiphy *wiphy, struct wireless_dev *wdev,
+			      const u8 *mac, struct station_info *sinfo)
 {
-	struct sc23xx_vif *vif = netdev_priv(ndev);
+	struct sc23xx_vif *vif = container_of(wdev, struct sc23xx_vif, wdev);
 
-	return sc23xx_cmd_set_rekey_data(vif, data);
+	if (vif->wdev.iftype != NL80211_IFTYPE_STATION &&
+	    vif->wdev.iftype != NL80211_IFTYPE_P2P_CLIENT)
+		return -EOPNOTSUPP;
+	if (vif->state != SC23XX_STATE_CONNECTED ||
+	    !ether_addr_equal(mac, vif->bssid))
+		return -ENOENT;
+	return sc23xx_cmd_get_station(vif, sinfo);
+}
+
+static int sc23xx_dump_station(struct wiphy *wiphy, struct wireless_dev *wdev,
+			       int idx, u8 *mac, struct station_info *sinfo)
+{
+	struct sc23xx_vif *vif = container_of(wdev, struct sc23xx_vif, wdev);
+
+	if (idx)
+		return -ENOENT;
+	ether_addr_copy(mac, vif->bssid);
+	return sc23xx_get_station(wiphy, wdev, mac, sinfo);
 }
 
 static const struct cfg80211_ops sc23xx_ops = {
-#ifdef CONFIG_PM
+#ifdef CONFIG_PM_SLEEP
 	.suspend = sc23xx_suspend,
 	.resume = sc23xx_resume,
 #endif
@@ -347,9 +384,15 @@ static const struct cfg80211_ops sc23xx_ops = {
 	.change_virtual_intf = sc23xx_change_virtual_intf,
 	.mgmt_tx = sc23xx_mgmt_tx,
 	.set_power_mgmt = sc23xx_set_power_mgmt,
+	.get_station = sc23xx_get_station,
+	.dump_station = sc23xx_dump_station,
 	.sched_scan_start = sc23xx_sched_scan_start,
 	.sched_scan_stop = sc23xx_sched_scan_stop,
-	.set_rekey_data = sc23xx_set_rekey_data,
+	/*
+	 * GTK rekey offload (.set_rekey_data) is deliberately not advertised:
+	 * the marlin3_lite firmware asserts on CMD_KEY/SUBCMD_REKEY (resets CP2
+	 * right after the 4-way handshake). Rekeying is handled in-host instead.
+	 */
 };
 
 static void sc23xx_reg_notify(struct wiphy *wiphy,
@@ -397,11 +440,80 @@ void sc23xx_wakeup_fw(struct sc23xx_dev *sdev)
 }
 EXPORT_SYMBOL_GPL(sc23xx_wakeup_fw);
 
+/* Read the SoC's 64-bit die UID from the two efuse nvmem cells (uid-end@58
+ * and uid-start@5c, contiguous) - the same pair btsprd_hci uses to derive the
+ * Bluetooth address. Propagates -EPROBE_DEFER if the nvmem provider isn't
+ * ready yet.
+ */
+static int sc23xx_read_uid(struct device *dev, u8 uid[8])
+{
+	static const char * const names[2] = { "uid-end", "uid-start" };
+	struct nvmem_cell *cell;
+	size_t len;
+	void *buf;
+	int i;
+
+	for (i = 0; i < 2; i++) {
+		cell = nvmem_cell_get(dev, names[i]);
+		if (IS_ERR(cell))
+			return PTR_ERR(cell);
+
+		buf = nvmem_cell_read(cell, &len);
+		nvmem_cell_put(cell);
+		if (IS_ERR(buf))
+			return PTR_ERR(buf);
+		if (len < 4) {
+			kfree(buf);
+			return -EINVAL;
+		}
+
+		memcpy(uid + i * 4, buf, 4);
+		kfree(buf);
+	}
+
+	return 0;
+}
+
+/* Derive a stable per-unit address from the die UID, so the interface keeps
+ * the same MAC across reboots instead of being randomised on every probe.
+ *
+ * The fold mirrors btsprdsdio_setup_bdaddr(), but XORs the last byte so the
+ * Wi-Fi and Bluetooth addresses differ despite sharing a UID. 0x70 is
+ * deliberately avoided there: vif.c already uses it to spin the secondary
+ * interface's address off this one.
+ */
+static int sc23xx_mac_addr_from_uid(struct device *dev, u8 *addr)
+{
+	u8 uid[8];
+	int ret;
+
+	ret = sc23xx_read_uid(dev, uid);
+	if (ret)
+		return ret;
+
+	/* fold all 8 UID bytes into the 6-byte address */
+	addr[0] = uid[0] ^ uid[6];
+	addr[1] = uid[1] ^ uid[7];
+	addr[2] = uid[2];
+	addr[3] = uid[3];
+	addr[4] = uid[4];
+	addr[5] = uid[5] ^ 0x0f;
+
+	/* Unlike bdaddr_t, a MAC is big-endian: addr[0] is the MSB. Force a
+	 * locally-administered unicast address (bit1 = 1, bit0 = 0), which also
+	 * guarantees the result passes is_valid_ether_addr().
+	 */
+	addr[0] = (addr[0] & 0xfe) | 0x02;
+
+	return 0;
+}
+
 void *sc23xx_alloc_device(struct device *dev, size_t size,
 			  const struct sc23xx_bus_ops *bus_ops)
 {
 	struct sc23xx_dev *sdev;
 	struct wiphy *wiphy;
+	int ret;
 	int i;
 
 	wiphy = wiphy_new(&sc23xx_ops, size);
@@ -415,9 +527,22 @@ void *sc23xx_alloc_device(struct device *dev, size_t size,
 	sdev = wiphy_priv(wiphy);
 	sdev->wiphy = wiphy;
 	sdev->bus_ops = bus_ops;
-	device_get_mac_address(dev, sdev->mac_addr);
+	ret = device_get_mac_address(dev, sdev->mac_addr);
+	if (ret || !is_valid_ether_addr(sdev->mac_addr)) {
+		eth_zero_addr(sdev->mac_addr);
+		ret = sc23xx_mac_addr_from_uid(dev, sdev->mac_addr);
+		if (ret == -EPROBE_DEFER) {
+			wiphy_free(wiphy);
+			return ERR_PTR(ret);
+		}
+		if (ret)
+			dev_warn(dev, "no chip UID for MAC derivation (%d)\n",
+				 ret);
+		else
+			dev_info(dev, "UID-derived MAC address %pM\n", sdev->mac_addr);
+	}
 
-	sdev->evt_wq = alloc_ordered_workqueue("%s-events", 0,
+	sdev->evt_wq = alloc_ordered_workqueue("%s-events", WQ_FREEZABLE,
 					       wiphy_name(wiphy));
 	if (!sdev->evt_wq) {
 		wiphy_err(sdev->wiphy, "failed to allocate event workqueue\n");
@@ -443,13 +568,16 @@ void *sc23xx_alloc_device(struct device *dev, size_t size,
 
 	memcpy(sdev->country_code, "00", 2);
 
+	atomic_set(&sdev->tx_seq, 0);
+	for (i = 0; i < SC23XX_TX_COLORS; i++)
+		atomic_set(&sdev->tx_credit[i], 0);
+
 	for (i = 0; i < SC23XX_STA_IDX_NUM; i++) {
 		sdev->sta[i].sdev = sdev;
 		INIT_DELAYED_WORK(&sdev->sta[i].tx_ba_setup,
 				  sc23xx_cmd_tx_addba_req);
 	}
 
-	wiphy->features |= NL80211_FEATURE_SAE;
 	wiphy->flags |= WIPHY_FLAG_HAS_REMAIN_ON_CHANNEL;
 	wiphy->max_remain_on_channel_duration = 5000;
 	wiphy->max_num_pmkids = SC23XX_MAX_NUM_PMKIDS;
@@ -458,11 +586,11 @@ void *sc23xx_alloc_device(struct device *dev, size_t size,
 	wiphy->cipher_suites = sc23xx_cipher_suites;
 	wiphy->n_cipher_suites = ARRAY_SIZE(sc23xx_cipher_suites);
 	wiphy->signal_type = CFG80211_SIGNAL_TYPE_MBM;
-	wiphy->interface_modes = BIT(NL80211_IFTYPE_STATION) | BIT(NL80211_IFTYPE_AP);
-	wiphy->mgmt_stypes = sc23xx_mgmt_stypes;
-#ifdef CONFIG_PM
+#ifdef CONFIG_PM_SLEEP
 	wiphy->wowlan = &sc23xx_wowlan_support;
 #endif
+	wiphy->interface_modes = BIT(NL80211_IFTYPE_STATION) | BIT(NL80211_IFTYPE_AP);
+	wiphy->mgmt_stypes = sc23xx_mgmt_stypes;
 	wiphy->reg_notifier = sc23xx_reg_notify;
 	wiphy->regulatory_flags |= REGULATORY_DISABLE_BEACON_HINTS;
 
@@ -586,6 +714,25 @@ int sc23xx_register_device(struct sc23xx_dev *sdev)
 		return ret;
 	}
 
+	/* Neither the platform (DT), the die UID, nor the firmware provided a
+	 * MAC (SC2355 keeps it in a per-unit vendor file we don't read); fall
+	 * back to a random locally-administered address so the interface is
+	 * usable. Note this one changes on every boot.
+	 */
+	if (!is_valid_ether_addr(sdev->mac_addr)) {
+		eth_random_addr(sdev->mac_addr);
+		sdev->mac_addr_random = true;
+		wiphy_info(sdev->wiphy, "using random MAC address %pM\n",
+			   sdev->mac_addr);
+	}
+	if (!sdev->mac_addr_random) {
+		ether_addr_copy(sdev->wiphy->perm_addr, sdev->mac_addr);
+		wiphy_info(sdev->wiphy, "permanent MAC address %pM\n",
+			   sdev->mac_addr);
+	} else {
+		eth_zero_addr(sdev->wiphy->perm_addr);
+	}
+
 	ret = wiphy_register(sdev->wiphy);
 	if (ret) {
 		wiphy_err(sdev->wiphy, "failed to register wiphy\n");
@@ -619,6 +766,7 @@ void sc23xx_unregister_device(struct sc23xx_dev *sdev)
 		mutex_unlock(&sdev->vif_lock);
 		if (vif) {
 			synchronize_srcu(&sdev->vif_srcu);
+			cancel_work_sync(&vif->mc_work);
 			cfg80211_unregister_wdev(&vif->wdev);
 		}
 	}
