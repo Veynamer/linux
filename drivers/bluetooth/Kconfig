@@ -426,6 +426,9 @@ config BT_QCOMSMD
 	  Say Y here to compile support for HCI over Qualcomm SMD into the
 	  kernel or say M to compile as a module.
 
+config BT_SPRD_INI
+	tristate
+
 config BT_SPRDSIPC
 	tristate "Unisoc SIPC based HCI support"
 	depends on BT_HCIUART
@@ -438,6 +441,21 @@ config BT_SPRDSIPC
 
 	  Say Y here to compile support for HCI over Unisoc SIPC into the
 	  kernel or say M to compile as a module.
+
+config BT_SPRDSDIO
+	tristate "Unisoc SDIO (Marlin3) based HCI support"
+	depends on BT_HCIUART
+	depends on UNISOC_WCN_SDIO
+	select BT_HCIUART_H4
+	select BT_SPRD_INI
+	help
+	  Unisoc SDIO based HCI driver for the external Marlin3-Lite (SC2355)
+	  WCN combo. Registers a native hci0 over the SDIO WCN core,
+	  performing the Unisoc pskey/RF/enable vendor-command init sequence
+	  in-kernel.
+
+	  Say Y here to compile support for HCI over the Unisoc SDIO WCN
+	  core into the kernel or say M to compile as a module.
 
 config BT_HCIRSI
 	tristate
