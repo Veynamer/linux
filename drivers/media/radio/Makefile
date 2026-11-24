@@ -30,6 +30,7 @@ obj-$(CONFIG_RADIO_TERRATEC) += radio-terratec.o
 obj-$(CONFIG_RADIO_TIMBERDALE) += radio-timb.o
 obj-$(CONFIG_RADIO_TRUST) += radio-trust.o
 obj-$(CONFIG_RADIO_TYPHOON) += radio-typhoon.o
+obj-$(CONFIG_RADIO_UNISOC) += radio-unisoc.o
 obj-$(CONFIG_RADIO_ZOLTRIX) += radio-zoltrix.o
 
 obj-$(CONFIG_USB_DSBR) += dsbr100.o
