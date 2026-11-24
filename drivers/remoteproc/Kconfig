@@ -327,6 +327,16 @@ config SPRD_WCN_REMOTEPROC
 	  Say y here to support the integrated WCN processor found on
 	  Spreadtrum/Unisoc SoCs.
 
+config SPRD_SDIO_GNSS_REMOTEPROC
+	tristate "Unisoc Marlin3 SDIO GNSS processor"
+	depends on UNISOC_WCN_SDIO
+	help
+	  GNSS firmware, calibration and power control for Marlin3 combo chips
+	  attached over SDIO. The GNSS data endpoint can be connected through
+	  PMSYS/SIPC using sprd,remoteproc, as on integrated Unisoc platforms.
+
+	  The module will be called sprd_sdio_gnss.
+
 config ST_REMOTEPROC
 	tristate "ST remoteproc support"
 	depends on ARCH_STI
