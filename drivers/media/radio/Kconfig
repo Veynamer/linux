@@ -13,6 +13,16 @@ menuconfig RADIO_ADAPTERS
 
 if RADIO_ADAPTERS
 
+config RADIO_UNISOC
+	tristate "Unisoc Marlin3 SDIO FM receiver"
+	depends on UNISOC_WCN_SDIO
+	help
+	  FM tuner in Unisoc Marlin3 combo chips connected over SDIO.
+	  Provides a V4L2 radio device with tuning, hardware seek, signal
+	  strength, mute, volume and deemphasis controls.
+
+	  The module will be called radio-unisoc.
+
 config RADIO_MAXIRADIO
 	tristate "Guillemot MAXI Radio FM 2000 radio"
 	depends on PCI && HAS_IOPORT
