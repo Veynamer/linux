@@ -4,8 +4,9 @@
  */
 
 #include <linux/delay.h>
-#include <linux/dma-mapping.h>
+#include <linux/io.h>
 #include <linux/of.h>
+#include <linux/overflow.h>
 
 #include "rpmsg_internal.h"
 #include "sprd_sipc.h"
@@ -624,7 +625,7 @@ static void sipc_sbuf_release(struct device *dev)
 {
 	struct sipc_sbuf *sbuf = container_of(dev, struct sipc_sbuf, dev);
 
-	dma_free_coherent(sbuf->dev.parent, sbuf->smem_size, sbuf->smem_virt, sbuf->smem_addr);
+	sipc_smem_free(sbuf->dev.parent, sbuf->smem_size, sbuf->smem_virt);
 	kfree(sbuf->rx_bounce);
 	kfree(sbuf->buffers);
 	kfree(sbuf);
@@ -657,6 +658,7 @@ int sipc_sbuf_init(struct sipc_channel *channel)
 	struct sbuf_ring_header *ring;
 	struct sbuf_smem_header *hdr;
 	struct sipc_sbuf *sbuf;
+	size_t size;
 	int i, ret;
 
 	sbuf = kzalloc_obj(*sbuf, GFP_KERNEL);
@@ -686,6 +688,14 @@ int sipc_sbuf_init(struct sipc_channel *channel)
 	if (ret || !sbuf->num_buffers)
 		sbuf->num_buffers = 1;
 
+	size = size_add(struct_size(hdr, rings, sbuf->num_buffers),
+			size_mul(size_add(tx_buf_size, rx_buf_size), sbuf->num_buffers));
+	if (size > U32_MAX) {
+		put_device(&sbuf->dev);
+		return -EOVERFLOW;
+	}
+	sbuf->smem_size = size;
+
 	sbuf->buffers = kzalloc_objs(*sbuf->buffers, sbuf->num_buffers, GFP_KERNEL);
 	if (!sbuf->buffers) {
 		put_device(&sbuf->dev);
@@ -705,12 +715,8 @@ int sipc_sbuf_init(struct sipc_channel *channel)
 		return -ENOMEM;
 	}
 
-	sbuf->smem_size = sizeof(struct sbuf_smem_header) +
-			  sizeof(struct sbuf_ring_header) * sbuf->num_buffers +
-			  (tx_buf_size + rx_buf_size) * sbuf->num_buffers;
-
-	sbuf->smem_virt = dma_alloc_coherent(sbuf->dev.parent, sbuf->smem_size,
-					     &sbuf->smem_addr, GFP_KERNEL);
+	sbuf->smem_virt = sipc_smem_alloc(sbuf->dev.parent, sbuf->smem_size,
+					  &sbuf->smem_addr);
 	if (!sbuf->smem_virt) {
 		put_device(&sbuf->dev);
 		return -ENOMEM;

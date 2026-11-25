@@ -77,8 +77,10 @@ config RPMSG_QCOM_SMD
 config RPMSG_SPRD_SIPC
 	tristate "Spreadtrum IPC (SIPC)"
 	depends on ARCH_SPRD || COMPILE_TEST
+	depends on HAS_IOMEM
 	depends on MAILBOX
 	depends on OF_RESERVED_MEM
+	select GENERIC_ALLOCATOR
 	select RPMSG
 	help
 	  This enables support for communication between the application

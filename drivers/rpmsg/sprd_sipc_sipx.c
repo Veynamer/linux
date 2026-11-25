@@ -5,8 +5,9 @@
 
 #include <linux/bitfield.h>
 #include <linux/delay.h>
-#include <linux/dma-mapping.h>
+#include <linux/io.h>
 #include <linux/of.h>
+#include <linux/overflow.h>
 
 #include "rpmsg_internal.h"
 #include "sprd_sipc.h"
@@ -495,8 +496,7 @@ static void sipx_ch_free(struct sipc_channel *channel)
 	sipc_cancel(channel->sipc, &sipx_ch->send_event);
 	sipc_cancel(channel->sipc, &sipx_ch->release_event);
 
-	dma_free_coherent(channel->parent, sipx_ch->smem_size,
-			  sipx_ch->smem_virt, sipx_ch->smem_addr);
+	sipc_smem_free(channel->parent, sipx_ch->smem_size, sipx_ch->smem_virt);
 	kfree(sipx_ch);
 }
 
@@ -509,7 +509,7 @@ static void sipx_add_ring(struct sipx_channel *ch, struct sipx_fifo_header *hdr,
 	writel(0, &hdr->wrptr);
 	writel((void *)*ring_virt - ch->smem_virt + ch->smem_addr, &hdr->addr);
 
-	*ring_virt += blk_count * 4;
+	*ring_virt += blk_count;
 }
 
 int sipx_channel_init(struct sipc_sipx *sipx, struct sipc_channel *channel)
@@ -518,6 +518,13 @@ int sipx_channel_init(struct sipc_sipx *sipx, struct sipc_channel *channel)
 	struct sipx_mem_header *hdr;
 	struct sipx_channel *sipx_ch;
 	__le32 *ring_virt;
+	size_t size, num_blocks;
+
+	num_blocks = size_add(size_add(sipx->dl_blk_count, sipx->dl_ack_count),
+			      size_add(sipx->ul_blk_count, sipx->ul_ack_count));
+	size = size_add(sizeof(*hdr), size_mul(num_blocks, sizeof(*ring_virt)));
+	if (size > U32_MAX)
+		return -EOVERFLOW;
 
 	sipx_ch = kzalloc_obj(*sipx_ch, GFP_KERNEL);
 	if (!sipx_ch)
@@ -531,13 +538,9 @@ int sipx_channel_init(struct sipc_sipx *sipx, struct sipc_channel *channel)
 
 	sipx_ch->sipx = sipx;
 
-	sipx_ch->smem_size = sizeof(struct sipx_mem_header) +
-			     (sipx->dl_blk_count + sipx->dl_ack_count +
-			      sipx->ul_blk_count + sipx->ul_ack_count) * 4;
-	sipx_ch->smem_virt = dma_alloc_coherent(channel->parent,
-						sipx_ch->smem_size,
-						&sipx_ch->smem_addr,
-						GFP_KERNEL);
+	sipx_ch->smem_size = size;
+	sipx_ch->smem_virt = sipc_smem_alloc(channel->parent, sipx_ch->smem_size,
+					     &sipx_ch->smem_addr);
 	if (!sipx_ch->smem_virt) {
 		kfree(sipx_ch);
 		return -ENOMEM;
@@ -591,6 +594,7 @@ struct sipc_sipx *sipx_init(struct device *parent)
 	struct sipx_shared_mem_header *hdr;
 	struct sipc_sipx *sipx;
 	__le32 *pool_virt;
+	size_t size, num_blocks;
 	u32 blk_addr;
 	int ret;
 
@@ -612,15 +616,20 @@ struct sipc_sipx *sipx_init(struct device *parent)
 		return ERR_PTR(-EINVAL);
 	}
 
+	num_blocks = size_add(size_add(sipx->dl_blk_count, sipx->dl_ack_count),
+			      size_add(sipx->ul_blk_count, sipx->ul_ack_count));
+	size = size_add(sizeof(*hdr),
+			size_mul(num_blocks, SIPX_BLOCK_SIZE + sizeof(*pool_virt)));
+	if (size > U32_MAX) {
+		kfree(sipx);
+		return ERR_PTR(-EOVERFLOW);
+	}
+
 	spin_lock_init(&sipx->tx_lock);
 	init_waitqueue_head(&sipx->block_avail);
 
-	sipx->smem_size = sizeof(struct sipx_shared_mem_header) +
-			  (sipx->dl_blk_count + sipx->dl_ack_count +
-			   sipx->ul_blk_count + sipx->ul_ack_count) *
-			  (SIPX_BLOCK_SIZE + 4);
-	sipx->smem_virt = dma_alloc_coherent(parent, sipx->smem_size,
-					     &sipx->smem_addr, GFP_KERNEL);
+	sipx->smem_size = size;
+	sipx->smem_virt = sipc_smem_alloc(parent, sipx->smem_size, &sipx->smem_addr);
 	if (!sipx->smem_virt) {
 		kfree(sipx);
 		return ERR_PTR(-ENOMEM);
@@ -662,7 +671,7 @@ struct sipc_sipx *sipx_init(struct device *parent)
 
 void sipx_destroy(struct sipc_sipx *sipx)
 {
-	dma_free_coherent(sipx->parent, sipx->smem_size, sipx->smem_virt, sipx->smem_addr);
+	sipc_smem_free(sipx->parent, sipx->smem_size, sipx->smem_virt);
 	put_device(sipx->parent);
 	kfree(sipx);
 }

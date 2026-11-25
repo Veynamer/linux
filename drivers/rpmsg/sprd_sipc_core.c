@@ -3,7 +3,10 @@
  * Copyright (C) 2025 Otto Pflüger
  */
 
+#include <linux/dma-direct.h>
 #include <linux/dma-mapping.h>
+#include <linux/genalloc.h>
+#include <linux/io.h>
 #include <linux/kthread.h>
 #include <linux/mailbox_client.h>
 #include <linux/module.h>
@@ -11,6 +14,7 @@
 #include <linux/of_device.h>
 #include <linux/of_platform.h>
 #include <linux/of_reserved_mem.h>
+#include <linux/overflow.h>
 #include <linux/platform_device.h>
 #include <linux/xarray.h>
 
@@ -30,6 +34,9 @@ struct sprd_sipc {
 	struct mbox_chan *mbox_oob_chan;
 	struct workqueue_struct *wq;
 
+	struct gen_pool *smem_pool;
+	void *smem_virt;
+
 	struct sipc_sipx *sipx;
 	struct xarray channels;
 
@@ -37,6 +44,109 @@ struct sprd_sipc {
 	struct list_head queue;
 	bool tx_in_progress;
 };
+
+static bool sipc_smem_dma_valid(struct device *dev, struct reserved_mem *rmem)
+{
+	const struct bus_dma_region *map;
+	dma_addr_t dma_base, dma_end;
+	phys_addr_t end;
+	u64 offset;
+
+	if (check_add_overflow(rmem->base, rmem->size - 1, &end))
+		return false;
+
+	/* All buffers must use one contiguous remote address range. */
+	if (dev->dma_range_map) {
+		for (map = dev->dma_range_map; map->size; map++) {
+			if (rmem->base < map->cpu_start)
+				continue;
+			offset = rmem->base - map->cpu_start;
+			if (offset < map->size && rmem->size <= map->size - offset)
+				break;
+		}
+		if (!map->size)
+			return false;
+	}
+
+	dma_base = phys_to_dma(dev, rmem->base);
+	dma_end = phys_to_dma(dev, end);
+
+	/* SIPC messages and ring headers contain 32-bit remote addresses. */
+	return dma_base != DMA_MAPPING_ERROR && dma_end != DMA_MAPPING_ERROR &&
+	       dma_end >= dma_base && dma_end - dma_base == rmem->size - 1 &&
+	       dma_end <= U32_MAX && dma_capable(dev, dma_base, rmem->size, false);
+}
+
+static int sipc_smem_init(struct sprd_sipc *sipc)
+{
+	struct device *dev = &sipc->dev;
+	struct device_node *np;
+	struct reserved_mem *rmem;
+
+	np = of_parse_phandle(dev->of_node, "memory-region", 0);
+	if (!np)
+		return -EINVAL;
+
+	rmem = of_reserved_mem_lookup(np);
+	if (!rmem || !of_property_read_bool(np, "no-map") ||
+	    of_property_read_bool(np, "reusable")) {
+		of_node_put(np);
+		return -EINVAL;
+	}
+	of_node_put(np);
+
+	if (!rmem->size || rmem->size > SIZE_MAX ||
+	    !IS_ALIGNED(rmem->base, PAGE_SIZE) || !IS_ALIGNED(rmem->size, PAGE_SIZE))
+		return -EINVAL;
+
+	if (!sipc_smem_dma_valid(dev, rmem)) {
+		dev_err(dev, "shared memory is outside the remote address range\n");
+		return -EINVAL;
+	}
+
+	sipc->smem_virt = memremap(rmem->base, rmem->size, MEMREMAP_WC);
+	if (!sipc->smem_virt)
+		return -ENOMEM;
+
+	/* Stock rings fit with page granularity, not power-of-two blocks. */
+	sipc->smem_pool = gen_pool_create(PAGE_SHIFT, NUMA_NO_NODE);
+	if (!sipc->smem_pool)
+		return -ENOMEM;
+
+	return gen_pool_add_virt(sipc->smem_pool, (unsigned long)sipc->smem_virt,
+				 rmem->base, rmem->size, NUMA_NO_NODE);
+}
+
+void *sipc_smem_alloc(struct device *dev, size_t size, dma_addr_t *dma_addr)
+{
+	struct sprd_sipc *sipc = container_of(dev, struct sprd_sipc, dev);
+	unsigned long addr;
+
+	if (!size || size > gen_pool_size(sipc->smem_pool))
+		return NULL;
+
+	addr = gen_pool_alloc(sipc->smem_pool, size);
+	if (!addr)
+		return NULL;
+
+	*dma_addr = phys_to_dma(dev, gen_pool_virt_to_phys(sipc->smem_pool, addr));
+	memset((void *)addr, 0, size);
+	/* Keep the mapping alive until deferred child releases finish. */
+	get_device(dev);
+
+	return (void *)addr;
+}
+
+void sipc_smem_free(struct device *dev, size_t size, void *addr)
+{
+	struct sprd_sipc *sipc = container_of(dev, struct sprd_sipc, dev);
+
+	if (!addr)
+		return;
+
+	gen_pool_free(sipc->smem_pool, (unsigned long)addr, size);
+	put_device(dev);
+}
 
 int __sipc_send(struct sprd_sipc *sipc, u8 channel, u8 type, u16 cmd, u32 value)
 {
@@ -336,7 +446,10 @@ static void sprd_sipc_release(struct device *dev)
 	mbox_free_channel(sipc->mbox_chan);
 	mbox_free_channel(sipc->mbox_oob_chan);
 
-	of_reserved_mem_device_release(dev);
+	if (sipc->smem_pool)
+		gen_pool_destroy(sipc->smem_pool);
+	if (sipc->smem_virt)
+		memunmap(sipc->smem_virt);
 	destroy_workqueue(sipc->wq);
 	kfree(sipc);
 }
@@ -402,7 +515,7 @@ struct sprd_sipc *sprd_sipc_register(struct device *parent, struct device_node *
 		goto unregister;
 	}
 
-	ret = of_reserved_mem_device_init(dev);
+	ret = sipc_smem_init(sipc);
 	if (ret) {
 		dev_err(dev, "failed to initialize shared memory: %d\n", ret);
 		goto unregister;

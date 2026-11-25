@@ -84,6 +84,9 @@ static inline void sipc_init_message(struct sipc_queued_message *msg,
 void sipc_queue(struct sprd_sipc *sipc, struct sipc_queued_message *msg);
 void sipc_cancel(struct sprd_sipc *sipc, struct sipc_queued_message *msg);
 
+void *sipc_smem_alloc(struct device *dev, size_t size, dma_addr_t *dma_addr);
+void sipc_smem_free(struct device *dev, size_t size, void *addr);
+
 struct rpmsg_endpoint *sipc_create_ept(struct sprd_sipc *sipc,
 				       struct rpmsg_device *rpdev,
 				       rpmsg_rx_cb_t cb, void *priv,
