@@ -23,16 +23,33 @@ config SND_SOC_SPRD_MCDT
 	  is used for sound stream transmission between audio subsystem
 	  and other AP/CP subsystem.
 
+config SND_SOC_SPRD_UMS512
+	tristate "SoC Audio support for UMS512"
+	depends on SND_SOC_SPRD
+	depends on SPRD_AGDSP
+	select SND_SOC_SPRD_COMMON
+	select SND_SOC_SPRD_MCDT
+	select SND_SOC_SPRD_PLATFORM
+	select SND_SOC_SPRD_VBC_V4_DSP
+	help
+	  Enable the ASoC machine driver for Unisoc UMS512 systems. It
+	  connects the VBC DSP frontends to the digital and analog codecs,
+	  with board-specific routing and backend links supplied by DT.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called snd-soc-ums512.
+
 config SND_SOC_SPRD_UMS9230
 	tristate "SoC Audio support for UMS9230"
 	depends on SND_SOC_SPRD
+	depends on SPRD_AGDSP
 	select SND_SOC_SPRD_COMMON
 	select SND_SOC_SPRD_MCDT
 	select SND_SOC_SPRD_PLATFORM
 	select SND_SOC_SPRD_VBC_V4_DSP
 	help
 	  Say Y here to enable audio support for typical systems such as
-	  mobile phones based on the Unisoc UMS9230 SoCs
+	  mobile phones based on the Unisoc UMS9230 SoC.
 
 config SND_SOC_SPRD_VBC_V4_DSP
 	tristate "Unisoc VBC v4 (DSP) support"
@@ -40,6 +57,6 @@ config SND_SOC_SPRD_VBC_V4_DSP
 	depends on SND_SOC_SPRD_MCDT
 	help
 	  Say Y here to add support for DSP-based audio in SoCs such as
-	  UMS9230.
+	  UMS512 and UMS9230.
 
 endif
