@@ -4,8 +4,9 @@
  */
 
 #include <linux/delay.h>
-#include <linux/dma-mapping.h>
+#include <linux/io.h>
 #include <linux/of.h>
+#include <linux/overflow.h>
 
 #include "rpmsg_internal.h"
 #include "sprd_sipc.h"
@@ -461,8 +462,7 @@ static void sipc_sblock_free(struct sipc_channel *channel)
 	sipc_cancel(channel->sipc, &sblock->send_event);
 	sipc_cancel(channel->sipc, &sblock->release_event);
 
-	dma_free_coherent(channel->parent, sblock->smem_size,
-			  sblock->smem_virt, sblock->smem_addr);
+	sipc_smem_free(channel->parent, sblock->smem_size, sblock->smem_virt);
 	kfree(sblock);
 }
 
@@ -472,6 +472,7 @@ int sipc_sblock_init(struct sipc_channel *channel)
 	struct sblock_smem_header *hdr;
 	struct sblock_blk_header *blk;
 	struct sipc_sblock *sblock;
+	size_t size, num_blocks;
 	u32 blk_addr;
 	int i, ret;
 
@@ -485,6 +486,13 @@ int sipc_sblock_init(struct sipc_channel *channel)
 		return -EINVAL;
 	}
 
+	num_blocks = size_add(tx_blk_count, rx_blk_count);
+	size = size_add(sizeof(*hdr), size_mul(num_blocks, 2 * sizeof(*blk)));
+	size = size_add(size, size_mul(tx_blk_size, tx_blk_count));
+	size = size_add(size, size_mul(rx_blk_size, rx_blk_count));
+	if (size > U32_MAX)
+		return -EOVERFLOW;
+
 	sblock = kzalloc_obj(*sblock, GFP_KERNEL);
 	if (!sblock)
 		return -ENOMEM;
@@ -497,14 +505,9 @@ int sipc_sblock_init(struct sipc_channel *channel)
 	sipc_init_message(&sblock->release_event, channel, SMSG_TYPE_EVENT,
 			  SBLOCK_EVENT_RELEASE, 0);
 
-	sblock->smem_size = sizeof(struct sblock_smem_header) +
-		(tx_blk_count + rx_blk_count) * sizeof(struct sblock_blk_header) +
-		tx_blk_size * tx_blk_count + rx_blk_size * rx_blk_count;
-
-	sblock->smem_virt = dma_alloc_coherent(channel->parent,
-					       sblock->smem_size,
-					       &sblock->smem_addr,
-					       GFP_KERNEL);
+	sblock->smem_size = size;
+	sblock->smem_virt = sipc_smem_alloc(channel->parent, sblock->smem_size,
+					    &sblock->smem_addr);
 	if (!sblock->smem_virt) {
 		kfree(sblock);
 		return -ENOMEM;
