@@ -75,6 +75,19 @@ config LEDS_MT6370_FLASH
 	  This driver can also be built as a module. If so, the module
 	  will be called "leds-mt6370-flash".
 
+config LEDS_OCP81375
+	tristate "OCP81375 flash LED controller"
+	depends on I2C
+	depends on V4L2_FLASH_LED_CLASS || !V4L2_FLASH_LED_CLASS
+	select REGMAP_I2C
+	help
+	  Enable torch and flash support for the Orient Chip OCP81375 dual
+	  LED controller. Each output is exposed through the LED flash
+	  class and optionally V4L2.
+
+	  To build this driver as a module, choose M here: the module
+	  will be called leds-ocp81375.
+
 config LEDS_QCOM_FLASH
 	tristate "LED support for flash module inside Qualcomm PMIC"
 	depends on MFD_SPMI_PMIC || COMPILE_TEST
