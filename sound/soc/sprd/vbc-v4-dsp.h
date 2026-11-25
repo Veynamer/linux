@@ -25,6 +25,12 @@ enum {
 };
 
 enum {
+	VBC_DG_TX0,
+	VBC_DG_TX1,
+	VBC_DG_RX0,
+};
+
+enum {
 	VBC_MIXER0_TX0,
 	VBC_MIXER1_TX0,
 	VBC_MIXER0_TX1,
@@ -90,6 +96,11 @@ struct vbc_dg_ctrl {
 	u32 id;
 	u32 left;
 	u32 right;
+} __packed;
+
+struct vbc_dg_module_ctrl {
+	u32 vbc_startup_reload;
+	struct vbc_dg_ctrl dg;
 } __packed;
 
 struct vbc_smthdg_module_ctrl {

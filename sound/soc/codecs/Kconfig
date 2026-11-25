@@ -299,6 +299,7 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_UDA1334
 	imply SND_SOC_UDA1342
 	imply SND_SOC_UDA1380
+	imply SND_SOC_UMS512_DIGITAL
 	imply SND_SOC_UMS9230_DIGITAL
 	imply SND_SOC_WCD9335
 	imply SND_SOC_WCD934X
@@ -2387,6 +2388,20 @@ config SND_SOC_UDA1380
 	help
 	  The UDA1380 codec is used in the HTC Magician and on a number of
 	  Samsung reference boards, as well as the LPC32xx series.
+
+config SND_SOC_UMS512_DIGITAL
+	tristate "Unisoc UMS512 digital audio codec"
+	depends on ARCH_SPRD || COMPILE_TEST
+	select REGMAP_MMIO
+	select MULTIPLEXER
+	help
+	  Enable support for the digital audio codec in Unisoc UMS512 SoCs.
+	  It connects the audio DSP to the SC2730 PMIC codec and controls
+	  the playback and capture sample rates, clocks, and IIS routing
+	  multiplexers.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called snd-soc-ums512-digital.
 
 config SND_SOC_UMS9230_DIGITAL
 	tristate "UMS9230 Digital Codec"

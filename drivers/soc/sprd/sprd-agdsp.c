@@ -291,6 +291,7 @@ static void sprd_agdsp_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id sprd_agdsp_of_match[] = {
+	{ .compatible = "sprd,ums512-agdsp" },
 	{ .compatible = "sprd,ums9230-agdsp" },
 	{ }
 };

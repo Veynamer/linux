@@ -6,9 +6,11 @@
 #include <linux/dmaengine.h>
 #include <linux/firmware.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 #include <linux/soc/sprd/agdsp.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
@@ -27,8 +29,14 @@ enum {
 	VBC_IIS3,
 };
 
+struct sprd_vbc_hw_info {
+	u32 fragment_len[VBC_FE_INVALID];
+	bool capture_dg;
+};
+
 struct sprd_vbc_priv {
 	struct device *dev;
+	const struct sprd_vbc_hw_info *info;
 	struct sprd_agdsp_ipc *ipc;
 	struct sprd_mcdt_chan *mcdt_voice_capture;
 	struct sprd_mcdt_chan *mcdt_playback;
@@ -41,6 +49,10 @@ struct sprd_vbc_priv {
 	u32 current_fe_rx[VBC_NUM_RX_IDS];
 	u8 voice_mute;
 	u8 voice_started;
+	/* Protect the cached capture gain and updates to the DSP. */
+	struct mutex capture_dg_lock;
+	u32 capture_dg;
+	bool capture_dg_set;
 };
 
 static int vbc_cmd_set_ctrl(struct sprd_vbc_priv *vbc, u32 ctl, u32 id,
@@ -400,6 +412,68 @@ static int vbc_mixer_mode_put(struct snd_kcontrol *kcontrol,
 				   sizeof(struct vbc_mixer_ctrl));
 }
 
+static int vbc_set_capture_dg(struct sprd_vbc_priv *vbc, u32 gain)
+{
+	struct vbc_dg_module_ctrl params = {
+		.dg = {
+			.id = VBC_DG_RX0,
+			.left = gain,
+			.right = gain,
+		},
+	};
+
+	return sprd_agdsp_send_cmd(vbc->ipc, AGDSP_CH_VBC_CTL,
+				   VBC_DSP_IO_KCTL_SET, VBC_CTL_DG, -1,
+				   &params, sizeof(params));
+}
+
+static int vbc_capture_dg_get(struct snd_kcontrol *kcontrol,
+			      struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_mixer_control *mc = (void *)kcontrol->private_value;
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct sprd_vbc_priv *vbc = snd_soc_component_get_drvdata(component);
+
+	mutex_lock(&vbc->capture_dg_lock);
+	ucontrol->value.integer.value[0] = mc->max - vbc->capture_dg;
+	mutex_unlock(&vbc->capture_dg_lock);
+
+	return 0;
+}
+
+static int vbc_capture_dg_put(struct snd_kcontrol *kcontrol,
+			      struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_mixer_control *mc = (void *)kcontrol->private_value;
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct sprd_vbc_priv *vbc = snd_soc_component_get_drvdata(component);
+	long value = ucontrol->value.integer.value[0];
+	u32 gain;
+	int ret = 0;
+
+	if (value < 0 || value > mc->max)
+		return -EINVAL;
+	gain = mc->max - value;
+
+	mutex_lock(&vbc->capture_dg_lock);
+	if (vbc->capture_dg_set && gain == vbc->capture_dg)
+		goto out;
+	ret = vbc_set_capture_dg(vbc, gain);
+	if (!ret) {
+		vbc->capture_dg = gain;
+		vbc->capture_dg_set = true;
+		ret = 1;
+	}
+out:
+	mutex_unlock(&vbc->capture_dg_lock);
+	return ret;
+}
+
+static const struct snd_kcontrol_new sprd_vbc_capture_dg_controls[] = {
+	SOC_SINGLE_EXT("RX0 Digital Capture Volume", SND_SOC_NOPM, 0, 0x7f, 1,
+		       vbc_capture_dg_get, vbc_capture_dg_put),
+};
+
 static const struct snd_kcontrol_new sprd_vbc_controls[] = {
 	SOC_SINGLE_EXT("Voice Mute Uplink", SND_SOC_NOPM, 0, 1, 0,
 		       vbc_voice_mute_get, vbc_voice_mute_put),
@@ -723,7 +797,7 @@ static int sprd_vbc_fe_hw_params(struct snd_pcm_substream *substream,
 		sprd_mcdt_chan_dma_enable(mcdt_chan, mcdt_dma, watermark);
 		dma_data->datawidth[0] = DMA_SLAVE_BUSWIDTH_4_BYTES;
 		dma_data->dev_phys[0] = mcdt_chan->fifo_phys;
-		dma_data->fragment_len[0] = 80;
+		dma_data->fragment_len[0] = vbc->info->fragment_len[fe_dai->id];
 		snd_soc_dai_set_dma_data(fe_dai, substream, dma_data);
 	} else {
 		kfree(dma_data);
@@ -743,6 +817,15 @@ static int sprd_vbc_fe_hw_params(struct snd_pcm_substream *substream,
 	 */
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		ret = vbc_cmd_set_ctrl(vbc, VBC_CTL_SRC, vbc_get_fe_tx_id(fe_dai->id), rate);
+		if (ret)
+			return ret;
+	}
+	if (vbc->info->capture_dg && fe_dai->id == VBC_FE_CAPTURE_DSP) {
+		/* The firmware restores its default gain when opening a stream. */
+		mutex_lock(&vbc->capture_dg_lock);
+		if (vbc->capture_dg_set)
+			ret = vbc_set_capture_dg(vbc, vbc->capture_dg);
+		mutex_unlock(&vbc->capture_dg_lock);
 		if (ret)
 			return ret;
 	}
@@ -957,7 +1040,20 @@ static struct snd_soc_dai_driver sprd_vbc_dais[] = {
 	SPRD_BE_DAI(VBC_IIS3),
 };
 
+static int sprd_vbc_component_probe(struct snd_soc_component *component)
+{
+	struct sprd_vbc_priv *vbc = snd_soc_component_get_drvdata(component);
+
+	if (!vbc->info->capture_dg)
+		return 0;
+
+	return snd_soc_add_component_controls(component,
+					      sprd_vbc_capture_dg_controls,
+					      ARRAY_SIZE(sprd_vbc_capture_dg_controls));
+}
+
 static const struct snd_soc_component_driver sprd_vbc_component = {
+	.probe			= sprd_vbc_component_probe,
 	.name			= "sprd-vbc-component",
 	.controls		= sprd_vbc_controls,
 	.num_controls		= ARRAY_SIZE(sprd_vbc_controls),
@@ -1024,6 +1120,10 @@ static int sprd_vbc_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	vbc->dev = dev;
+	vbc->info = device_get_match_data(dev);
+	if (!vbc->info)
+		return -EINVAL;
+	mutex_init(&vbc->capture_dg_lock);
 	platform_set_drvdata(pdev, vbc);
 
 	vbc->ipc = sprd_get_agdsp_ipc(dev->of_node, "sprd,dsp");
@@ -1083,8 +1183,28 @@ static void sprd_vbc_remove(struct platform_device *pdev)
 	sprd_put_agdsp_ipc(vbc->ipc);
 }
 
+static const struct sprd_vbc_hw_info ums512_vbc_info = {
+	/* MCDT FIFO word counts converted to the DMA API's byte units. */
+	.fragment_len = {
+		[VBC_FE_FAST_PLAYBACK] = 160 * DMA_SLAVE_BUSWIDTH_4_BYTES,
+		[VBC_FE_CAPTURE_DSP] = 80 * DMA_SLAVE_BUSWIDTH_4_BYTES,
+		[VBC_FE_VOICE_CAPTURE] = 160 * DMA_SLAVE_BUSWIDTH_4_BYTES,
+	},
+	.capture_dg = true,
+};
+
+static const struct sprd_vbc_hw_info ums9230_vbc_info = {
+	/* Preserve the fragment lengths used by the existing UMS9230 path. */
+	.fragment_len = {
+		[VBC_FE_FAST_PLAYBACK] = 80,
+		[VBC_FE_CAPTURE_DSP] = 80,
+		[VBC_FE_VOICE_CAPTURE] = 80,
+	},
+};
+
 static const struct of_device_id sprd_vbc_of_match[] = {
-	{ .compatible = "sprd,ums9230-vbc" },
+	{ .compatible = "sprd,ums512-vbc", .data = &ums512_vbc_info },
+	{ .compatible = "sprd,ums9230-vbc", .data = &ums9230_vbc_info },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, sprd_vbc_of_match);

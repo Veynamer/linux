@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (C) 2019 Spreadtrum Communications Inc.
 
+#include <linux/clk.h>
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
@@ -52,6 +53,8 @@
 
 struct sprd_mcdt_hw_info {
 	u32 revision;
+	u32 dma_offset;
+	bool manage_clock;
 	u32 num_adc_channels;
 	u32 num_dac_channels;
 	u32 dac_fifo_addr_base;
@@ -91,6 +94,21 @@ static const struct sprd_mcdt_hw_info sprd_mcdt_r2_info = {
 	.dma_dac_ack_base = 0x15c,
 	.dma_adc_ack_base = 0x160,
 	.dma_adc_shift = 12,
+};
+
+static const struct sprd_mcdt_hw_info ums512_mcdt_info = {
+	.dma_offset = 0x32000000,
+	.manage_clock = true,
+	.num_adc_channels = 10,
+	.num_dac_channels = 10,
+	.dac_fifo_addr_base = 0xe4,
+	.adc_fifo_addr_base = 0xe8,
+	.fifo_addr_stride = 8,
+	.fifo_clr_reg = 0x14c,
+	.dma_dac_chn_base = 0x148,
+	.dma_adc_chn_base = 0x150,
+	.dma_dac_ack_base = 0x154,
+	.dma_adc_ack_base = 0x15c,
 };
 
 enum sprd_mcdt_fifo_int {
@@ -749,14 +767,15 @@ static void sprd_mcdt_init_chans(struct sprd_mcdt_dev *mcdt,
 	for (i = 0; i < MCDT_CHANNEL_NUM; i++) {
 		struct sprd_mcdt_chan *chan = &mcdt->chan[i];
 
+		/* The audio DMA bus can use a different alias from the AP. */
+		chan->fifo_phys = res->start - mcdt->info->dma_offset +
+				  MCDT_CH_BASE + i * 4;
 		if (i < mcdt->info->num_dac_channels) {
 			chan->id = i;
 			chan->type = SPRD_MCDT_DAC_CHAN;
-			chan->fifo_phys = res->start + MCDT_CH_BASE + i * 4;
 		} else {
 			chan->id = i - mcdt->info->num_dac_channels;
 			chan->type = SPRD_MCDT_ADC_CHAN;
-			chan->fifo_phys = res->start + MCDT_CH_BASE + i * 4;
 		}
 
 		chan->mcdt = mcdt;
@@ -772,6 +791,7 @@ static int sprd_mcdt_probe(struct platform_device *pdev)
 {
 	struct sprd_mcdt_dev *mcdt;
 	struct resource *res;
+	struct clk *clk;
 	int ret, irq;
 
 	mcdt = devm_kzalloc(&pdev->dev, sizeof(*mcdt), GFP_KERNEL);
@@ -781,6 +801,13 @@ static int sprd_mcdt_probe(struct platform_device *pdev)
 	mcdt->info = of_device_get_match_data(&pdev->dev);
 	if (!mcdt->info)
 		return -EINVAL;
+
+	if (mcdt->info->manage_clock) {
+		clk = devm_clk_get_optional_enabled(&pdev->dev, NULL);
+		if (IS_ERR(clk))
+			return dev_err_probe(&pdev->dev, PTR_ERR(clk),
+					     "Failed to enable MCDT clock\n");
+	}
 
 	mcdt->base = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
 	if (IS_ERR(mcdt->base))
@@ -820,6 +847,7 @@ static void sprd_mcdt_remove(struct platform_device *pdev)
 
 static const struct of_device_id sprd_mcdt_of_match[] = {
 	{ .compatible = "sprd,sc9860-mcdt", .data = &sprd_mcdt_r1_info },
+	{ .compatible = "sprd,ums512-mcdt", .data = &ums512_mcdt_info },
 	{ .compatible = "sprd,ums9230-mcdt", .data = &sprd_mcdt_r2_info },
 	{ }
 };
