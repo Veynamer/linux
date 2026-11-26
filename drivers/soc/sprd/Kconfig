@@ -10,4 +10,18 @@ config SPRD_AGDSP
 	  Say y here to enable support for communication with the audio
 	  DSP found in Spreadtrum/Unisoc SoCs.
 
+config SPRD_UMS512_CPU_DVFS
+	bool
+
+config SPRD_UMS512_GPU_DVFS
+	bool "UMS512 GPU hardware DVFS support"
+	depends on SPRD_UMS512_CLK=y && PM
+	select MFD_SYSCON
+	default y
+	help
+	  Request GPU clock rates through the UMS512 hardware DVFS engine,
+	  which coordinates GPU clocks and the shared MM/modem voltage.
+	  This provides the core, memory and system clocks used by Panfrost
+	  and retains the shared voltage banks initialized by firmware.
+
 endmenu
