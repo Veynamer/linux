@@ -395,4 +395,10 @@
 #define CLK_DEBUG_APB			13
 #define CLK_APCPU_SEC_NUM		(CLK_DEBUG_APB + 1)
 
+/* GPU hardware DVFS outputs. */
+#define CLK_GPU_DVFS_CORE	0
+#define CLK_GPU_DVFS_MEM		1
+#define CLK_GPU_DVFS_SYS		2
+#define CLK_GPU_DVFS_NUM		(CLK_GPU_DVFS_SYS + 1)
+
 #endif /* _DT_BINDINGS_CLK_UMS512_H_ */
