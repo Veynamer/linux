@@ -381,8 +381,8 @@ static int sprd_iommu_sync_map(struct iommu_domain *domain,
 	else
 		reg = SPRD_VAU_UPDATE;
 
-	/* clear IOMMU TLB buffer after page table updated */
-	sprd_iommu_write(dom->sdev, reg, 0xffffffff);
+	/* Make page table writes visible before invalidating the TLB. */
+	writel(0xffffffff, dom->sdev->base + reg);
 	return 0;
 }
 
