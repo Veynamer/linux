@@ -119,7 +119,7 @@ static irqreturn_t sprd_musb_interrupt(int irq, void *__hci)
 	if (musb->int_usb || musb->int_tx || musb->int_rx)
 		retval = musb_interrupt(musb);
 
-	if (int_dma)
+	if (int_dma && musb->dma_controller)
 		retval |= sprd_musb_dma_interrupt(musb, int_dma);
 
 	spin_unlock_irqrestore(&musb->lock, flags);
@@ -167,6 +167,9 @@ static int sprd_musb_init(struct musb *musb)
 	ret = phy_init(glue->phy);
 	if (ret)
 		return ret;
+
+	/* Quiesce firmware DMA even when the core is configured for PIO. */
+	sprd_musb_dma_reset(musb->mregs);
 
 	if (musb->port_mode == MUSB_OTG) {
 		ret = sprd_otg_switch_init(glue);

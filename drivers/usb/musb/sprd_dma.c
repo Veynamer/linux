@@ -39,6 +39,7 @@ struct sprd_musb_dma_controller {
 };
 
 static void dma_channel_release(struct dma_channel *channel);
+static int dma_channel_abort(struct dma_channel *channel);
 
 static void dma_controller_stop(struct sprd_musb_dma_controller *controller)
 {
@@ -95,6 +96,7 @@ static void dma_channel_release(struct dma_channel *channel)
 {
 	struct sprd_musb_dma_channel *musb_channel = channel->private_data;
 
+	dma_channel_abort(channel);
 	channel->actual_len = 0;
 
 	musb_channel->controller->used_channels &= ~(1 << musb_channel->idx);
@@ -211,9 +213,15 @@ static int dma_channel_abort(struct dma_channel *channel)
 
 	u8 bchannel = musb_channel->idx;
 	int offset;
+	u32 pause;
 	u16 csr;
 
-	if (channel->status == MUSB_DMA_STATUS_BUSY) {
+	if (channel->status == MUSB_DMA_STATUS_BUSY ||
+	    channel->status == MUSB_DMA_STATUS_CORE_ABORT) {
+		/* Request a channel clear before dropping the buffer pointers. */
+		pause = musb_readl(mbase, MUSB_DMA_CHN_PAUSE(bchannel));
+		musb_writel(mbase, MUSB_DMA_CHN_PAUSE(bchannel), pause | CHN_CLR);
+
 		if (musb_channel->transmit) {
 			offset = musb->io.ep_offset(musb_channel->epnum,
 						MUSB_TXCSR);
@@ -240,6 +248,10 @@ static int dma_channel_abort(struct dma_channel *channel)
 
 		musb_writel(mbase, MUSB_DMA_CHN_LLIST_PTR(bchannel), 0);
 		musb_writel(mbase, MUSB_DMA_CHN_ADDR(bchannel), 0);
+		musb_writel(mbase, MUSB_DMA_CHN_INTR(bchannel),
+			    CHN_CLEAR_INT_EN | CHN_LLIST_INT_CLR |
+			    CHN_START_INT_CLR | CHN_FRAG_INT_CLR |
+			    CHN_BLK_INT_CLR | CHN_USBRX_LAST_INT_CLR);
 		channel->status = MUSB_DMA_STATUS_FREE;
 	}
 
@@ -319,7 +331,8 @@ irqreturn_t sprd_musb_dma_interrupt(struct musb *musb, u32 int_hsdma)
 					CHN_USBRX_LAST_INT_CLR;
 				musb_writel(mbase, MUSB_DMA_CHN_INTR(bchannel), intr);
 
-				sprd_musb_dma_complete(musb, musb_channel);
+				if (musb_channel->channel.status == MUSB_DMA_STATUS_BUSY)
+					sprd_musb_dma_complete(musb, musb_channel);
 			}
 		}
 	}
@@ -334,6 +347,8 @@ void sprd_musb_dma_controller_destroy(struct dma_controller *c)
 			struct sprd_musb_dma_controller, controller);
 	struct musb *musb = controller->private_data;
 
+	dma_controller_stop(controller);
+
 	if (controller->linklist) {
 		dma_free_coherent(musb->controller,
 				  sizeof(struct sprd_musb_linklist_node) *
@@ -341,8 +356,6 @@ void sprd_musb_dma_controller_destroy(struct dma_controller *c)
 				  controller->linklist,
 				  controller->linklist_dma_addr);
 	}
-
-	dma_controller_stop(controller);
 
 	kfree(controller);
 }
@@ -378,28 +391,33 @@ dma_controller_alloc(struct musb *musb, void __iomem *base)
 	return controller;
 }
 
-struct dma_controller *
-sprd_musb_dma_controller_create(struct musb *musb, void __iomem *base)
+void sprd_musb_dma_reset(void __iomem *base)
 {
-	struct sprd_musb_dma_controller *controller;
 	int i;
-
-	controller = dma_controller_alloc(musb, base);
-	if (!controller)
-		return NULL;
 
 	/* reset DMA to avoid unexpected problems if USB was already enabled */
 	for (i = 1; i <= MUSB_DMA_CHANNELS; i++) {
 		musb_writel(base, MUSB_DMA_CHN_PAUSE(i), CHN_CLR);
 		musb_writel(base, MUSB_DMA_CHN_CFG(i), 0);
-		musb_writel(base, MUSB_DMA_CHN_INTR(i), CHN_CLEAR_INT_EN |
-			CHN_LLIST_INT_CLR | CHN_START_INT_CLR |
-			CHN_FRAG_INT_CLR | CHN_BLK_INT_CLR |
-			CHN_USBRX_LAST_INT_CLR);
+		musb_writel(base, MUSB_DMA_CHN_INTR(i),
+			    CHN_LLIST_INT_CLR | CHN_START_INT_CLR |
+			    CHN_FRAG_INT_CLR | CHN_BLK_INT_CLR |
+			    CHN_USBRX_LAST_INT_CLR);
 		musb_writel(base, MUSB_DMA_CHN_ADDR(i), 0);
 		musb_writel(base, MUSB_DMA_CHN_LLIST_PTR(i), 0);
 		musb_writel(base, MUSB_DMA_CHN_ADDR_H(i), 0);
 	}
+}
+EXPORT_SYMBOL_GPL(sprd_musb_dma_reset);
+
+struct dma_controller *
+sprd_musb_dma_controller_create(struct musb *musb, void __iomem *base)
+{
+	struct sprd_musb_dma_controller *controller;
+
+	controller = dma_controller_alloc(musb, base);
+	if (!controller)
+		return NULL;
 
 	return &controller->controller;
 }

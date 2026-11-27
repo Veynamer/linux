@@ -98,6 +98,7 @@ struct sprd_musb_linklist_node {
 } __packed;
 
 irqreturn_t sprd_musb_dma_interrupt(struct musb *musb, u32 int_hsdma);
+void sprd_musb_dma_reset(void __iomem *base);
 struct dma_controller *sprd_musb_dma_controller_create(struct musb *musb,
 						       void __iomem *base);
 void sprd_musb_dma_controller_destroy(struct dma_controller *c);
